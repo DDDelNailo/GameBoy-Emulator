@@ -1,27 +1,26 @@
-from pathlib import Path
+from mmu import MMU
+from cpu import CPU
+from ppu import PPU
+from timer import Timer
+from joypad import Joypad
 
+class Emulator:
+    def __init__(self, rom_path: str) -> None:
+        self.mmu: MMU = MMU(rom_path)
+        self.cpu: CPU = CPU(self.mmu)
+        self.ppu: PPU = PPU(self.mmu)
+        self.timer: Timer = Timer(self.mmu)
+        self.joypad: Joypad = Joypad(self.mmu)
 
-class Rom:
-    def __init__(self, path: str):
-        self.data: bytes = Path(path).read_bytes()
+    def step(self) -> None:
+        cycles: int = self.cpu.step()
+        self.ppu.step(cycles)
+        self.timer.step(cycles)
 
-    def get(self, from_addr: int, to_addr: int) -> bytes:
-        return self.data[from_addr:to_addr]
-
-    def print(self, from_addr: int, to_addr: int) -> None:
-        data: bytes = self.get(from_addr, to_addr)
-
-        offsets: list[int] = [i for i in range(16)]
-        print(f" " * 9 + " ".join(["0" + hex(i)[-1] for i in range(16)]).upper())
-
-        for chunk_start in range(0x0, len(data), 0x10):
-            out = hex(chunk_start)[2:].rjust(8, "0")
-            for offset in offsets:
-                out += " " + hex(data[chunk_start + offset])[2:].rjust(2, "0")
-            print(out.upper())
-
-
-rom: Rom = Rom("roms/Pokemon - Red Version.gb")
-# header:  $0100—$014F
-print(rom.get(0x0100, 0x014F))  # Header
-rom.print(0x0100, 0x014F)  # Header
+    def run(self) -> None:
+        for _ in range(10):
+            self.step()
+            
+if __name__ == "__main__":
+    emulator = Emulator("roms/Pokemon - Red Version.gb")
+    emulator.run()

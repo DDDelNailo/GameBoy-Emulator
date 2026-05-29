@@ -1,1 +1,4 @@
 roms/
+__pycache__/
+docs/
+venv/
