@@ -45,6 +45,8 @@ ADDRESSES: dict[str, dict[int, str]] = {
 class CPU:
     def __init__(self, mmu: MMU) -> None:
         self.mmu: MMU = mmu
+        self.line: int = 0
+        self.log_from: int | None = None
         self._pc: int = -0x0001
         self._sp: int = 0x0000
         self._a: int = 0x00
@@ -59,7 +61,7 @@ class CPU:
         self.ime: bool = False
         self.op_codes: dict[str, Callable[[bytes], int]] = self.build_op_codes(
             {
-                "00000000": self._op_nop,
+                # "00000000": self._op_nop,
                 "00rr0001": self._op_ld_r16_imm16,
                 "00rr0010": self._op_ld_p_r16mem_a,
                 # "........": self._op_ld_a_p_r16mem,
@@ -67,9 +69,9 @@ class CPU:
                 # "........": self._op_inc_r16,
                 # "........": self._op_dec_r16,
                 # "........": self._op_add_hl_r16,
-                # "........": self._op_inc_r8,
+                "00ttt100": self._op_inc_r8,
                 # "........": self._op_dec_r8,
-                # "........": self._op_ld_r8_imm8,
+                "00ttt110": self._op_ld_r8_imm8,
                 # "........": self._op_rlca,
                 # "........": self._op_rrca,
                 # "........": self._op_rla,
@@ -79,7 +81,7 @@ class CPU:
                 # "........": self._op_scf,
                 # "........": self._op_ccf,
                 # "........": self._op_jr_imm8,
-                # "........": self._op_jr_cond_imm8,
+                "001rr000": self._op_jr_cond_imm8,
                 # "........": self._op_stop,
                 # "........": self._op_ld_r8_r8,
                 # "........": self._op_halt,
@@ -111,7 +113,7 @@ class CPU:
                 # "........": self._op_pop_r16stk,
                 # "........": self._op_push_r16stk,
                 "11001011": self._op_PREFIX,
-                # "........": self._op_ldh_p_c_a,
+                "11100010": self._op_ldh_p_c_a,
                 # "........": self._op_ldh_p_imm8_a,
                 # "........": self._op_ld_p_imm16_a,
                 # "........": self._op_ldh_a_p_c,
@@ -134,7 +136,7 @@ class CPU:
                 # "........": self._op_sra_r8,
                 # "........": self._op_swap_r8,
                 # "........": self._op_srl_r8,
-                # "........": self.bit_b3_r8,
+                "01xxxyyy": self.bit_b3_r8,
                 # "........": self.res_b3_r8,
                 # "........": self.set_b3_r8,
             }
@@ -348,6 +350,8 @@ class CPU:
 
     def step(self) -> int:
         self.advance_pc()
+        if self.log_from is not None and self.pc >= self.log_from:
+            logger.setup(level=logger.DEBUG)
         opcode: bytes = self.mmu.read(self.pc)
         return self.execute(opcode)
 
@@ -367,26 +371,31 @@ class CPU:
         log.error("Unimplemented opcode 0x%02X", opcode[0])
         exit()
 
-    def _op_nop(self, opcode: bytes) -> int:
-        log.debug("NOP")
-        return 4
+    def disassemble(self, msg: object, *args: object) -> None:
+        self.line += 1
+        log.info(f"({self.line}) " + str(msg), *args)
+
+    # def _op_nop(self, opcode: bytes) -> int:
+    #     return 4
 
     def _op_ld_r16_imm16(self, opcode: bytes) -> int:
         log.debug("LD from imm16 to r16")
         dest_reg: int = (opcode[0] >> 4) & 0b11
         r16: str = ADDRESSES["r16"][dest_reg]
         imm16: int = int.from_bytes(self.get_advance_pc(2), "little")
-        log.info("LD %s,$%04x", ADDRESSES["r16"][dest_reg], imm16)
+        self.disassemble("LD %s,$%04x", ADDRESSES["r16"][dest_reg], imm16)
+
+        value: int = imm16
 
         match r16:
             case "bc":
-                self.bc = imm16
+                self.bc = value
             case "de":
-                self.de = imm16
+                self.de = value
             case "hl":
-                self.hl = imm16
+                self.hl = value
             case "sp":
-                self.sp = imm16
+                self.sp = value
             case _:
                 log.error("Invalid r16 register code: %d", dest_reg)
                 exit()
@@ -396,7 +405,9 @@ class CPU:
         log.debug("LD from A to (r16mem)")
         src_reg: int = (opcode[0] >> 4) & 0b11
         r16mem: str = ADDRESSES["r16mem"][src_reg]
-        log.info("LD (%s),A", r16mem)
+        self.disassemble("LD (%s),A", r16mem)
+
+        value: int = self.a
 
         match r16mem:
             case "bc":
@@ -412,9 +423,8 @@ class CPU:
             case _:
                 log.error("Invalid r16mem register code: %d", src_reg)
                 exit()
+        self.mmu.write(addr, bytes([value]))
 
-        self.mmu.write(addr, bytes([self.a]))
-        log.debug("Wrote 0x%02X to [0x%04X]", self.a, addr)
         return 8
 
     # def _op_ld_a_p_r16mem(self, opcode: bytes) -> int:
@@ -424,7 +434,25 @@ class CPU:
     #     return 0
 
     # def _op_inc_r16(self, opcode: bytes) -> int:
-    #     return 0
+    #     log.debug("INC r16")
+    #     dest_reg: int = (opcode[0] >> 4) & 0b11
+    #     r16: str = ADDRESSES["r16"][dest_reg]
+    #     self.disassemble("INC %s", r16)
+
+    #     match r16:
+    #         case "bc":
+    #             self.bc += 1
+    #         case "de":
+    #             self.de += 1
+    #         case "hl":
+    #             self.hl += 1
+    #         case "sp":
+    #             self.sp += 1
+    #         case _:
+    #             log.error("Invalid r16 register code: %d", dest_reg)
+    #             exit()
+
+    #     return 8
 
     # def _op_dec_r16(self, opcode: bytes) -> int:
     #     return 0
@@ -432,14 +460,68 @@ class CPU:
     # def _op_add_hl_r16(self, opcode: bytes) -> int:
     #     return 0
 
-    # def _op_inc_r8(self, opcode: bytes) -> int:
-    #     return 0
+    def _op_inc_r8(self, opcode: bytes) -> int:
+        log.debug("INC r8")
+        dest_reg: int = (opcode[0] >> 3) & 0b111
+        r8: str = ADDRESSES["r8"][dest_reg]
+        self.disassemble("INC %s", r8)
+
+        match r8:
+            case "a":
+                self.a += 1
+            case "b":
+                self.b += 1
+            case "c":
+                self.c += 1
+            case "d":
+                self.d += 1
+            case "e":
+                self.e += 1
+            case "h":
+                self.h += 1
+            case "l":
+                self.l += 1
+            case "(hl)":
+                addr: int = self.hl
+                value: int = self.mmu.read(addr)[0] + 1
+                self.mmu.write(addr, bytes([value & 0xFF]))
+            case _:
+                log.error("Invalid r8 register code: %d", dest_reg)
+                exit()
+
+        return 4
 
     # def _op_dec_r8(self, opcode: bytes) -> int:
     #     return 0
 
-    # def _op_ld_r8_imm8(self, opcode: bytes) -> int:
-    #     return 0
+    def _op_ld_r8_imm8(self, opcode: bytes) -> int:
+        log.debug("LD from imm8 to r8")
+        dest_reg: int = (opcode[0] >> 3) & 0b111
+        r8: str = ADDRESSES["r8"][dest_reg]
+        imm8: int = self.get_advance_pc()[0]
+        self.disassemble("LD %s,$%02x", r8, imm8)
+
+        value: int = imm8
+
+        match r8:
+            case "a":
+                self.a = value
+            case "b":
+                self.b = value
+            case "c":
+                self.c = value
+            case "d":
+                self.d = value
+            case "e":
+                self.e = value
+            case "h":
+                self.h = value
+            case "l":
+                self.l = value
+            case _:
+                log.error("Invalid r8 register code: %d", dest_reg)
+                exit()
+        return 8
 
     # def _op_rlca(self, opcode: bytes) -> int:
     #     return 0
@@ -468,8 +550,36 @@ class CPU:
     # def _op_jr_imm8(self, opcode: bytes) -> int:
     #     return 0
 
-    # def _op_jr_cond_imm8(self, opcode: bytes) -> int:
-    #     return 0
+    def _op_jr_cond_imm8(self, opcode: bytes) -> int:
+        log.debug("JR if condition to PC + imm8")
+        cond_code: int = (opcode[0] >> 3) & 0b11
+        cond: str = ADDRESSES["cond"][cond_code]
+        imm8: int = int.from_bytes(self.get_advance_pc(1), "little", signed=True)
+        jump: int = (self.pc + imm8) & 0xFFFF
+        self.disassemble("JR %s,$%04X", cond, jump)
+
+        cc: bool = False
+        match cond:
+            case "nz":
+                if not self.flag_z():
+                    cc = True
+            case "z":
+                if self.flag_z():
+                    cc = True
+            case "nc":
+                if not self.flag_c():
+                    cc = True
+            case "c":
+                if self.flag_c():
+                    cc = True
+            case _:
+                log.error("Invalid condition code: %d", cond_code)
+                exit()
+
+        if cc:
+            self.pc = jump
+
+        return 12 if cc else 8
 
     # def _op_stop(self, opcode: bytes) -> int:
     #     return 0
@@ -499,22 +609,23 @@ class CPU:
         log.debug("XOR A with r8")
         src_reg: int = opcode[0] & 0b111
         r8: str = ADDRESSES["r8"][src_reg]
-        log.info("XOR A,%s", r8)
+        self.disassemble("XOR A,%s", r8)
+
+        value: int = 0
 
         if r8 == "a":
-            self.a ^= self.a
+            value = self.a
         elif r8 == "(hl)":
             addr: int = self.hl
             value: int = self.mmu.read(addr)[0]
-            log.debug("Read 0x%02X from (HL)", value)
-            self.a ^= value
         else:
             value: int = getattr(self, r8)
             log.debug("Read 0x%02X from %s", value, r8)
-            self.a ^= value
+
+        self.a ^= value
 
         self.set_flags(
-            z=1 if self.a == 0 else 0,
+            z=self.a == 0,
             n=0,
             h=0,
             c=0,
@@ -589,8 +700,13 @@ class CPU:
         opcode = self.get_advance_pc()
         return self.execute(opcode, prefix=True)
 
-    # def _op_ldh_p_c_a(self, opcode: bytes) -> int:
-    #     return 0
+    def _op_ldh_p_c_a(self, opcode: bytes) -> int:
+        log.debug("LD from A to (0xFF00 + C)")
+        addr: int = 0xFF00 + self.c
+        self.disassemble("LD ($FF00+C),A")
+
+        self.mmu.write(addr, bytes([self.a]))
+        return 2
 
     # def _op_ldh_p_imm8_a(self, opcode: bytes) -> int:
     #     return 0
@@ -646,8 +762,32 @@ class CPU:
     # def _op_srl_r8(self, opcode: bytes) -> int:
     #     return 0
 
-    # def bit_b3_r8(self, opcode: bytes) -> int:
-    #     return 0
+    def bit_b3_r8(self, opcode: bytes) -> int:
+        log.debug("BIT b3 of r8")
+        bit: int = (opcode[0] >> 3) & 0b111
+        src_reg: int = opcode[0] & 0b111
+        r8: str = ADDRESSES["r8"][src_reg]
+        self.disassemble("BIT %d,%s", bit, r8)
+
+        value: int = 0
+
+        if r8 == "a":
+            value = self.a
+        elif r8 == "(hl)":
+            addr: int = self.hl
+            value: int = self.mmu.read(addr)[0]
+        else:
+            value: int = getattr(self, r8)
+            log.debug("Read 0x%02X from %s", value, r8)
+
+        self.set_flags(
+            z=(value & (1 << bit)) == 0,
+            n=0,
+            h=1,
+            c=None,
+        )
+
+        return 8
 
     # def res_b3_r8(self, opcode: bytes) -> int:
     #     return 0

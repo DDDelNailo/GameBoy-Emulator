@@ -25,3 +25,8 @@ def setup(level: int | str = logging.WARNING) -> None:
 
 def get(name: str) -> logging.Logger:
     return logging.getLogger(name)
+
+DEBUG = logging.DEBUG
+INFO = logging.INFO
+WARNING = logging.WARNING
+ERROR = logging.ERROR
