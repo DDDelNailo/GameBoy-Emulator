@@ -21,6 +21,9 @@ class Emulator:
 
     def step(self) -> None:
         cycles: int = self.cpu.step()
+        if cycles == 0:
+            log.error("CPU step returned 0 cycles, which is invalid")
+            exit()
         self.ppu.step(cycles)
         self.timer.step(cycles)
 
