@@ -1,5 +1,7 @@
 import logger
+from apu import APU
 from rom import Rom
+import numpy as np
 
 log = logger.get("MMU")
 
@@ -14,7 +16,9 @@ class MMU:
         self.io: bytearray = bytearray(0x80)  # 128 bytes I/O registers
         self.hram: bytearray = bytearray(0x7F)  # 127 bytes HRAM
         self.ie: bytearray = bytearray(1)  # 1 byte IE register
-        
+
+        self.apu: APU = APU()
+
         self.io[0xFF40 - 0xFF00] = 0x91  # LCDC — LCD on, BG on
         self.io[0xFF47 - 0xFF00] = 0xFC  # BGP  — default palette
 
@@ -24,7 +28,16 @@ class MMU:
 
         self.rom.header.info()
 
-    def read(self, addr: int) -> bytes:
+    @property
+    def vram_np(self) -> np.ndarray:
+        return np.frombuffer(self.vram, dtype=np.uint8)
+
+    @property
+    def io_np(self) -> np.ndarray:
+        return np.frombuffer(self.io, dtype=np.uint8)
+
+    # def read_u8(self, addr: int) -> int:
+    def read_u8(self, addr: int) -> bytes:
         data: bytes
         if addr < 0x8000:  # ROM
             source: str = (
@@ -60,8 +73,12 @@ class MMU:
             log.debug("READ  0x%04X -> 0xFF (unusable)", addr)
             return 0xFF.to_bytes(1, "little")
         elif addr < 0xFF80:  # I/O registers
-            data = self.io[addr - 0xFF00 : addr - 0xFF00 + 1]
-            log.debug("READ  0x%04X -> 0x%02X (IO)", addr, data[0])
+            if 0xFF10 <= addr <= 0xFF26:
+                data = bytes([self.apu.read(addr)])
+            else:
+                data = self.io[addr - 0xFF00 : addr - 0xFF00 + 1]
+            val = data[0]
+            log.debug("READ  0x%04X -> 0x%02X (IO)", addr, val)
             return data
         elif addr < 0xFFFF:  # HRAM
             data = self.hram[addr - 0xFF80 : addr - 0xFF80 + 1]
@@ -74,7 +91,8 @@ class MMU:
             log.error("MMU read from invalid address 0x%04X", addr)
             raise ValueError(f"MMU read from invalid address {addr:04X}")
 
-    def write(self, addr: int, data: bytes) -> None:
+    # def write_u8(self, addr: int, value: int) -> None:
+    def write_u8(self, addr: int, data: bytes) -> None:
         if addr < 0x8000:  # ROM
             log.debug("WRITE 0x%04X = 0x%02X (ROM ignored)", addr, data[0])
         elif addr < 0xA000:  # VRAM
@@ -95,8 +113,14 @@ class MMU:
         elif addr < 0xFF00:  # Unusable memory
             log.debug("WRITE 0x%04X = 0x%02X (unusable ignored)", addr, data[0])
         elif addr < 0xFF80:  # I/O registers
-            log.debug("WRITE 0x%04X = 0x%02X (IO)", addr, data[0])
-            self.io[addr - 0xFF00] = data[0]
+            val = data[0]
+            log.debug("WRITE 0x%04X = 0x%02X (IO)", addr, val)
+
+            self.io[addr - 0xFF00] = val
+
+            if 0xFF10 <= addr <= 0xFF26:
+                self.apu.write(addr, val)
+
             if addr == 0xFF50 and data == b"\x01":
                 self.boot_rom_active = False
                 log.info("Boot ROM disabled")

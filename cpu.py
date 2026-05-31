@@ -346,14 +346,14 @@ class CPU:
         buf: bytearray = bytearray()
         for _ in range(n):
             self.advance_pc(1)
-            b: int = self.mmu.read(self.pc)[0]
+            b: int = self.mmu.read_u8(self.pc)[0]
             buf.append(b)
         return bytes(buf)
 
     def step(self) -> int:
         self.pc_jumped = False
 
-        opcode: bytes = self.mmu.read(self.pc)
+        opcode: bytes = self.mmu.read_u8(self.pc)
         cycles: int = self.execute(opcode)
 
         if not self.pc_jumped:
@@ -419,7 +419,7 @@ class CPU:
                 log.error("Invalid r16mem register code: %d", src_reg)
                 exit()
 
-        self.mmu.write(addr, bytes([self.a]))
+        self.mmu.write_u8(addr, bytes([self.a]))
 
         return 8
 
@@ -444,7 +444,7 @@ class CPU:
                 log.error("Invalid r16mem register code: %d", src_reg)
                 exit()
 
-        value: int = self.mmu.read(addr)[0]
+        value: int = self.mmu.read_u8(addr)[0]
         log.debug("Read 0x%02X from %s", value, r16mem)
         self.a = value
 
@@ -478,9 +478,9 @@ class CPU:
 
         if r8 == "(hl)":
             addr: int = self.hl
-            original: int = self.mmu.read(addr)[0]
+            original: int = self.mmu.read_u8(addr)[0]
             value: int = original + 1
-            self.mmu.write(addr, bytes([value & 0xFF]))
+            self.mmu.write_u8(addr, bytes([value & 0xFF]))
         else:
             original: int = getattr(self, r8)
             value: int = original + 1
@@ -502,9 +502,9 @@ class CPU:
 
         if r8 == "(hl)":
             addr: int = self.hl
-            original: int = self.mmu.read(addr)[0]
+            original: int = self.mmu.read_u8(addr)[0]
             value: int = original - 1
-            self.mmu.write(addr, bytes([value & 0xFF]))
+            self.mmu.write_u8(addr, bytes([value & 0xFF]))
         else:
             original: int = getattr(self, r8)
             value: int = original - 1
@@ -624,14 +624,14 @@ class CPU:
 
         if src_r8 == "(hl)":
             addr: int = self.hl
-            value: int = self.mmu.read(addr)[0]
+            value: int = self.mmu.read_u8(addr)[0]
         else:
             value: int = getattr(self, src_r8)
             log.debug("Read 0x%02X from %s", value, src_r8)
 
         if dest_r8 == "(hl)":
             addr: int = self.hl
-            self.mmu.write(addr, bytes([value]))
+            self.mmu.write_u8(addr, bytes([value]))
         else:
             setattr(self, dest_r8, value)
 
@@ -655,7 +655,7 @@ class CPU:
         value: int = 0
         if r8 == "(hl)":
             addr: int = self.hl
-            value: int = self.mmu.read(addr)[0]
+            value: int = self.mmu.read_u8(addr)[0]
         else:
             value: int = getattr(self, r8)
             log.debug("Read 0x%02X from %s", value, r8)
@@ -688,7 +688,7 @@ class CPU:
 
         if r8 == "(hl)":
             addr: int = self.hl
-            value: int = self.mmu.read(addr)[0]
+            value: int = self.mmu.read_u8(addr)[0]
         else:
             value: int = getattr(self, r8)
             log.debug("Read 0x%02X from %s", value, r8)
@@ -755,9 +755,9 @@ class CPU:
         log.debug("RET")
         self.disassemble("RET")
 
-        low: int = self.mmu.read(self.sp)[0]
+        low: int = self.mmu.read_u8(self.sp)[0]
         self.sp += 1
-        high: int = self.mmu.read(self.sp)[0]
+        high: int = self.mmu.read_u8(self.sp)[0]
         self.sp += 1
 
         addr: int = (high << 8) | low
@@ -790,9 +790,9 @@ class CPU:
         self.advance_pc()
 
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write(self.sp, bytes([self.pc >> 8 & 0xFF]))
+        self.mmu.write_u8(self.sp, bytes([self.pc >> 8 & 0xFF]))
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write(self.sp, bytes([self.pc & 0xFF]))
+        self.mmu.write_u8(self.sp, bytes([self.pc & 0xFF]))
 
         self.pc = imm16
         self.pc_jumped = True
@@ -808,9 +808,9 @@ class CPU:
         r16stk: str = ADDRESSES["r16stk"][dest_reg]
         self.disassemble("POP %s", r16stk)
 
-        low: int = self.mmu.read(self.sp)[0]
+        low: int = self.mmu.read_u8(self.sp)[0]
         self.sp = (self.sp + 1) & 0xFFFF
-        high: int = self.mmu.read(self.sp)[0]
+        high: int = self.mmu.read_u8(self.sp)[0]
         self.sp = (self.sp + 1) & 0xFFFF
 
         value: int = (high << 8) | low
@@ -828,9 +828,9 @@ class CPU:
         log.debug("Read 0x%02X from %s", value, r16stk)
 
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write(self.sp, bytes([(value >> 8) & 0xFF]))
+        self.mmu.write_u8(self.sp, bytes([(value >> 8) & 0xFF]))
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write(self.sp, bytes([value & 0xFF]))
+        self.mmu.write_u8(self.sp, bytes([value & 0xFF]))
 
         return 16
 
@@ -843,7 +843,7 @@ class CPU:
         addr: int = 0xFF00 + self.c
         self.disassemble("LD ($FF00+C),A")
 
-        self.mmu.write(addr, bytes([self.a]))
+        self.mmu.write_u8(addr, bytes([self.a]))
 
         return 8
 
@@ -853,7 +853,7 @@ class CPU:
         addr: int = 0xFF00 + imm8
         self.disassemble("LD ($FF00+%02X),A", imm8)
 
-        self.mmu.write(addr, bytes([self.a]))
+        self.mmu.write_u8(addr, bytes([self.a]))
 
         return 12
 
@@ -862,7 +862,7 @@ class CPU:
         imm16: int = int.from_bytes(self.get_advance_pc(2), "little")
         self.disassemble("LD ($%04X),A", imm16)
 
-        self.mmu.write(imm16, bytes([self.a]))
+        self.mmu.write_u8(imm16, bytes([self.a]))
 
         return 16
 
@@ -875,7 +875,7 @@ class CPU:
         addr: int = 0xFF00 + imm8
         self.disassemble("LD A,($FF00+%02X)", imm8)
 
-        value: int = self.mmu.read(addr)[0]
+        value: int = self.mmu.read_u8(addr)[0]
         log.debug("Read 0x%02X from (0xFF00 + $%02X)", value, imm8)
         self.a = value
 
@@ -915,7 +915,7 @@ class CPU:
 
         if r8 == "(hl)":
             addr: int = self.hl
-            value: int = self.mmu.read(addr)[0]
+            value: int = self.mmu.read_u8(addr)[0]
         else:
             value: int = getattr(self, r8)
             log.debug("Read 0x%02X from %s", value, r8)
@@ -925,7 +925,7 @@ class CPU:
 
         if r8 == "(hl)":
             addr: int = self.hl
-            self.mmu.write(addr, bytes([value]))
+            self.mmu.write_u8(addr, bytes([value]))
         else:
             setattr(self, r8, value)
 
@@ -964,7 +964,7 @@ class CPU:
 
         if r8 == "(hl)":
             addr: int = self.hl
-            value = self.mmu.read(addr)[0]
+            value = self.mmu.read_u8(addr)[0]
         else:
             value = getattr(self, r8)
             log.debug("Read 0x%02X from %s", value, r8)
