@@ -1,25 +1,44 @@
-# perf.py
 import time
+import atexit
 import logger
 
 log = logger.get("PERF")
 
+
 class PerfMonitor:
     def __init__(self) -> None:
         self.enabled = False
+
+        # rolling stats
         self._timings: dict[str, float] = {}
-        self._counts:  dict[str, int]   = {}
-        self._frame_times: list[float]  = []
-        self._frame_start: float        = 0.0
-        self._report_every: int         = 60   # frames
+        self._counts: dict[str, int] = {}
+        self._frame_times: list[float] = []
+
+        # lifetime stats
+        self._total_timings: dict[str, float] = {}
+        self._total_counts: dict[str, int] = {}
+        self._all_frame_times: list[float] = []
+
+        self._frame_start: float = 0.0
+        self._report_every: int = 60
+
+        atexit.register(self.report_lifetime)
 
     def frame_start(self) -> None:
-        if not self.enabled: return
+        if not self.enabled:
+            return
+
         self._frame_start = time.perf_counter()
 
     def frame_end(self) -> None:
-        if not self.enabled: return
-        self._frame_times.append(time.perf_counter() - self._frame_start)
+        if not self.enabled:
+            return
+
+        dt = time.perf_counter() - self._frame_start
+
+        self._frame_times.append(dt)
+        self._all_frame_times.append(dt)
+
         if len(self._frame_times) >= self._report_every:
             self._report()
             self._frame_times.clear()
@@ -27,30 +46,85 @@ class PerfMonitor:
             self._counts.clear()
 
     def begin(self, name: str) -> float:
-        if not self.enabled: return 0.0
+        if not self.enabled:
+            return 0.0
+
         return time.perf_counter()
 
     def end(self, name: str, start: float) -> None:
-        if not self.enabled: return
+        if not self.enabled:
+            return
+
         elapsed = time.perf_counter() - start
+
+        # rolling
         self._timings[name] = self._timings.get(name, 0.0) + elapsed
-        self._counts[name]  = self._counts.get(name, 0) + 1
+        self._counts[name] = self._counts.get(name, 0) + 1
+
+        # lifetime
+        self._total_timings[name] = self._total_timings.get(name, 0.0) + elapsed
+        self._total_counts[name] = self._total_counts.get(name, 0) + 1
 
     def _report(self) -> None:
-        n = len(self._frame_times)
-        avg_ms  = (sum(self._frame_times) / n) * 1000
-        max_ms  = max(self._frame_times) * 1000
-        fps     = 1.0 / (sum(self._frame_times) / n)
+        self._print_report(
+            "perf report",
+            self._frame_times,
+            self._timings,
+            self._counts,
+        )
 
-        log.debug("── perf report (last %d frames) ──────────────────", n)
-        log.debug("  frame   avg=%.2f ms  max=%.2f ms  fps=%.1f", avg_ms, max_ms, fps)
+    def report_lifetime(self) -> None:
+        if not self.enabled:
+            return
 
-        total = sum(self._timings.values()) or 1.0
-        for name, elapsed in sorted(self._timings.items(), key=lambda x: -x[1]):
-            calls   = self._counts[name]
-            pct     = (elapsed / total) * 100
-            per_call = (elapsed / calls) * 1_000_000   # µs
-            log.debug("  %-12s %5.1f%%  %6.1f µs/call  (%d calls)", name, pct, per_call, calls)
+        if not self._all_frame_times:
+            return
+
+        self._print_report(
+            "lifetime perf report",
+            self._all_frame_times,
+            self._total_timings,
+            self._total_counts,
+        )
+
+    def _print_report(
+        self,
+        title: str,
+        frame_times: list[float],
+        timings: dict[str, float],
+        counts: dict[str, int],
+    ) -> None:
+        n = len(frame_times)
+
+        avg_ms = (sum(frame_times) / n) * 1000
+        max_ms = max(frame_times) * 1000
+        fps = 1.0 / (sum(frame_times) / n)
+
+        log.debug("── %s (%d frames) ──────────────────", title, n)
+        log.debug(
+            "  frame   avg=%.2f ms  max=%.2f ms  fps=%.1f",
+            avg_ms,
+            max_ms,
+            fps,
+        )
+
+        total = sum(timings.values()) or 1.0
+
+        for name, elapsed in sorted(
+            timings.items(),
+            key=lambda x: -x[1],
+        ):
+            calls = counts[name]
+            pct = (elapsed / total) * 100
+            per_call = (elapsed / calls) * 1_000_000
+
+            log.debug(
+                "  %-12s %5.1f%%  %6.1f µs/call  (%d calls)",
+                name,
+                pct,
+                per_call,
+                calls,
+            )
 
         log.debug("──────────────────────────────────────────────────")
 

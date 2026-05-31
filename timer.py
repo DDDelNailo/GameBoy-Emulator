@@ -10,4 +10,4 @@ class Timer:
         log.debug("Timer initialized")
 
     def step(self, cycles: int) -> None:
-        log.debug("Step %d cycles", cycles)
+        pass

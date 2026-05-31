@@ -317,11 +317,11 @@ class Rom:
         self.data: bytes = Path(path).read_bytes()
         self.header: Header = Header(self)
 
-    def read_u8(self, addr: int) -> bytes:
-        return self.data[addr : addr + 1]
+    def read_u8(self, addr: int) -> int:
+        return self.data[addr]
 
-    def read_u16(self, addr: int) -> bytes:
-        return self.data[addr : addr + 2]
+    def read_u16(self, addr: int) -> int:
+        return int.from_bytes(self.data[addr : addr + 2], "little")
 
     def read_bytes(self, addr: int, size: int) -> bytes:
         return self.data[addr : addr + size]
@@ -372,43 +372,41 @@ class Header:
         self.manufacturer_code: str = self.b_manufacturer_code.decode("ascii").rstrip(
             "\0"
         )
-        self.b_cgb_flag: bytes = rom.read_u8(CGB_FLAG)
-        self.b_new_licensee_code: bytes = rom.read_u16(NEW_LICENSEE_CODE[0])
-        self.b_sgb_flag: bytes = rom.read_u8(SGB_FLAG)
-        self.b_cartridge_type: bytes = rom.read_u8(CARTRIDGE_TYPE)
-        self.cartridge_type: str = CARTRIDGE_TYPES.get(
-            self.b_cartridge_type[0], "Unknown"
-        )
-        self.b_rom_size: bytes = rom.read_u8(ROM_SIZE)
-        self.rom_size: str = ROM_SIZES.get(self.b_rom_size[0], "Unknown")
-        self.rom_banks: int = ROM_BANKS.get(self.b_rom_size[0], 0)
-        self.b_ram_size: bytes = rom.read_u8(RAM_SIZE)
-        self.ram_size: str = RAM_SIZES.get(self.b_ram_size[0], "Unknown")
-        self.b_destination_code: bytes = rom.read_u8(DESTINATION_CODE)
+        self.b_cgb_flag: int = rom.read_u8(CGB_FLAG)
+        self.b_new_licensee_code: int = rom.read_u16(NEW_LICENSEE_CODE[0])
+        self.b_sgb_flag: int = rom.read_u8(SGB_FLAG)
+        self.b_cartridge_type: int = rom.read_u8(CARTRIDGE_TYPE)
+        self.cartridge_type: str = CARTRIDGE_TYPES.get(self.b_cartridge_type, "Unknown")
+        self.b_rom_size: int = rom.read_u8(ROM_SIZE)
+        self.rom_size: str = ROM_SIZES.get(self.b_rom_size, "Unknown")
+        self.rom_banks: int = ROM_BANKS.get(self.b_rom_size, 0)
+        self.b_ram_size: int = rom.read_u8(RAM_SIZE)
+        self.ram_size: str = RAM_SIZES.get(self.b_ram_size, "Unknown")
+        self.b_destination_code: int = rom.read_u8(DESTINATION_CODE)
         self.destination_code: str = DESTINATION_CODES.get(
-            self.b_destination_code[0], "Unknown"
+            self.b_destination_code, "Unknown"
         )
-        self.b_old_licensee_code: bytes = rom.read_u8(OLD_LICENSEE_CODE)
+        self.b_old_licensee_code: int = rom.read_u8(OLD_LICENSEE_CODE)
         self.licensee_code: str = ""
-        if self.b_old_licensee_code[0] == 0x33:
+        if self.b_old_licensee_code == 0x33:
             self.licensee_code = NEW_LICENSEE_CODES.get(
-                self.b_new_licensee_code.decode("ascii"), "Unknown"
+                bytes([self.b_new_licensee_code]).decode("ascii"), "Unknown"
             )
         else:
             self.licensee_code = OLD_LICENSEE_CODES.get(
-                self.b_old_licensee_code[0], "Unknown"
+                self.b_old_licensee_code, "Unknown"
             )
-        self.b_mask_rom_version_number: bytes = rom.read_u8(MASK_ROM_VERSION_NUMBER)
-        self.b_header_checksum: bytes = rom.read_u8(HEADER_CHECKSUM)
-        self.b_global_checksum: bytes = rom.read_u16(GLOBAL_CHECKSUM[0])
+        self.b_mask_rom_version_number: int = rom.read_u8(MASK_ROM_VERSION_NUMBER)
+        self.b_header_checksum: int = rom.read_u8(HEADER_CHECKSUM)
+        self.b_global_checksum: int = rom.read_u16(GLOBAL_CHECKSUM[0])
 
     def info(self) -> None:
         log.info("Entry Point: %s", self.b_entry_point.hex().upper())
         log.info("Nintendo Logo: %s", self.b_nintendo_logo.hex().upper())
         log.info("Title: %s", self.title)
         log.info("Manufacturer Code: %s", self.manufacturer_code)
-        log.info("CGB Flag: %s", self.b_cgb_flag.hex().upper())
-        log.info("SGB Flag: %s", self.b_sgb_flag.hex().upper())
+        log.info("CGB Flag: %s", hex(self.b_cgb_flag).upper())
+        log.info("SGB Flag: %s", hex(self.b_sgb_flag).upper())
         log.info("Cartridge Type: %s", self.cartridge_type)
         log.info("ROM Size: %s", self.rom_size)
         log.info("ROM Banks: %s", self.rom_banks)
@@ -417,7 +415,7 @@ class Header:
         log.info("Licensee Code: %s", self.licensee_code)
         log.info(
             "Mask ROM Version Number: %s",
-            self.b_mask_rom_version_number.hex().upper(),
+            hex(self.b_mask_rom_version_number).upper(),
         )
-        log.info("Header Checksum: %s", self.b_header_checksum.hex().upper())
-        log.info("Global Checksum: %s", self.b_global_checksum.hex().upper())
+        log.info("Header Checksum: %s", hex(self.b_header_checksum).upper())
+        log.info("Global Checksum: %s", hex(self.b_global_checksum).upper())

@@ -22,7 +22,9 @@ def setup(level: int | str = logging.WARNING) -> None:
 
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)  # root passes everything
-    root.addHandler(handler)
+
+    if not root.handlers:
+        root.addHandler(handler)
 
     # set the default level on the root so components inherit it
     root.setLevel(level)
