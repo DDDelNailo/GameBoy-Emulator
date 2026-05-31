@@ -89,12 +89,12 @@ class CPU:
                 # "........": self._op_halt,
                 # "........": self._op_add_a_r8,
                 # "........": self._op_adc_a_r8,
-                # "........": self._op_sub_a_r8,
+                "10010ttt": self._op_sub_a_r8,
                 # "........": self._op_sbc_a_r8,
                 # "........": self._op_and_a_r8,
                 "10101ttt": self._op_xor_a_r8,
                 # "........": self._op_or_a_r8,
-                # "........": self._op_cp_a_r8,
+                "10111110": self._op_cp_a_r8,
                 # "........": self._op_add_a_imm8,
                 # "........": self._op_adc_a_imm8,
                 # "........": self._op_sub_a_imm8,
@@ -351,9 +351,6 @@ class CPU:
         return bytes(buf)
 
     def step(self) -> int:
-        if self.log_from is not None and self.pc == self.log_from:
-            logger.setup(level=logger.DEBUG)
-
         self.pc_jumped = False
 
         opcode: bytes = self.mmu.read(self.pc)
@@ -649,8 +646,31 @@ class CPU:
     # def _op_adc_a_r8(self, opcode: bytes) -> int:
     #     return 0
 
-    # def _op_sub_a_r8(self, opcode: bytes) -> int:
-    #     return 0
+    def _op_sub_a_r8(self, opcode: bytes) -> int:
+        log.debug("SUB A with r8")
+        src_reg: int = opcode[0] & 0b111
+        r8: str = ADDRESSES["r8"][src_reg]
+        self.disassemble("SUB %s", r8)
+
+        value: int = 0
+        if r8 == "(hl)":
+            addr: int = self.hl
+            value: int = self.mmu.read(addr)[0]
+        else:
+            value: int = getattr(self, r8)
+            log.debug("Read 0x%02X from %s", value, r8)
+
+        result: int = (self.a - value) & 0xFF
+        self.a = result
+
+        self.set_flags(
+            z=result == 0,
+            n=1,
+            h=(self.a & 0x0F) < (value & 0x0F),
+            c=self.a < value,
+        )
+
+        return 4
 
     # def _op_sbc_a_r8(self, opcode: bytes) -> int:
     #     return 0
@@ -687,8 +707,8 @@ class CPU:
     # def _op_or_a_r8(self, opcode: bytes) -> int:
     #     return 0
 
-    # def _op_cp_a_r8(self, opcode: bytes) -> int:
-    #     return 0
+    def _op_cp_a_r8(self, opcode: bytes) -> int:
+        return 0
 
     # def _op_add_a_imm8(self, opcode: bytes) -> int:
     #     return 0
@@ -725,7 +745,7 @@ class CPU:
             c=self.a < imm8,
         )
         log.debug("Compare A (0x%02X) with imm8 (0x%02X)", self.a, imm8)
-        
+
         return 8
 
     # def _op_ret_cond(self, opcode: bytes) -> int:
@@ -746,7 +766,7 @@ class CPU:
         self.pc_jumped = True
 
         return 16
-    
+
     # def _op_reti(self, opcode: bytes) -> int:
     #     return 0
 

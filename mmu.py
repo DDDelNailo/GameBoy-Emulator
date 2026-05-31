@@ -14,6 +14,9 @@ class MMU:
         self.io: bytearray = bytearray(0x80)  # 128 bytes I/O registers
         self.hram: bytearray = bytearray(0x7F)  # 127 bytes HRAM
         self.ie: bytearray = bytearray(1)  # 1 byte IE register
+        
+        self.io[0xFF40 - 0xFF00] = 0x91  # LCDC — LCD on, BG on
+        self.io[0xFF47 - 0xFF00] = 0xFC  # BGP  — default palette
 
         with open(boot_rom_path, "rb") as f:
             self.boot_rom: bytes = f.read()
@@ -21,23 +24,14 @@ class MMU:
 
         self.rom.header.info()
 
-    def read_io(self, addr: int) -> bytes:
-        log.debug("READ  0x%04X -> IO default 0xFF", addr)
-        return 0xFF.to_bytes(1, "little")
-
-    def write_io(self, addr: int, data: bytes) -> None:
-        log.debug("WRITE 0x%04X = 0x%02X -> IO", addr, data[0])
-        if addr == 0xFF50 and data == b"\x01":
-            self.boot_rom_active = False
-            log.info("Boot ROM disabled")
-
     def read(self, addr: int) -> bytes:
+        data: bytes
         if addr < 0x8000:  # ROM
             source: str = (
                 "boot ROM" if self.boot_rom_active and addr < 0x100 else "cartridge ROM"
             )
             if self.boot_rom_active and addr < 0x100:
-                data: bytes = self.boot_rom[addr : addr + 1]
+                data = self.boot_rom[addr : addr + 1]
             else:
                 data = self.rom.read_u8(addr)
             log.debug("READ  0x%04X -> 0x%02X (%s)", addr, data[0], source)
@@ -66,7 +60,9 @@ class MMU:
             log.debug("READ  0x%04X -> 0xFF (unusable)", addr)
             return 0xFF.to_bytes(1, "little")
         elif addr < 0xFF80:  # I/O registers
-            return self.read_io(addr)
+            data = self.io[addr - 0xFF00 : addr - 0xFF00 + 1]
+            log.debug("READ  0x%04X -> 0x%02X (IO)", addr, data[0])
+            return data
         elif addr < 0xFFFF:  # HRAM
             data = self.hram[addr - 0xFF80 : addr - 0xFF80 + 1]
             log.debug("READ  0x%04X -> 0x%02X (HRAM)", addr, data[0])
@@ -99,7 +95,11 @@ class MMU:
         elif addr < 0xFF00:  # Unusable memory
             log.debug("WRITE 0x%04X = 0x%02X (unusable ignored)", addr, data[0])
         elif addr < 0xFF80:  # I/O registers
-            self.write_io(addr, data)
+            log.debug("WRITE 0x%04X = 0x%02X (IO)", addr, data[0])
+            self.io[addr - 0xFF00] = data[0]
+            if addr == 0xFF50 and data == b"\x01":
+                self.boot_rom_active = False
+                log.info("Boot ROM disabled")
         elif addr < 0xFFFF:  # HRAM
             log.debug("WRITE 0x%04X = 0x%02X (HRAM)", addr, data[0])
             self.hram[addr - 0xFF80] = data[0]
