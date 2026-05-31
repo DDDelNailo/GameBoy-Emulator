@@ -1,9 +1,5 @@
 from pathlib import Path
 
-import logger
-
-log = logger.get("ROM")
-
 # Header Constants
 ENTRY_POINT = 0x0100, 0x0103
 NINTENDO_LOGO = 0x0104, 0x0133
@@ -329,10 +325,10 @@ class Rom:
     def read_to_bytes(self, addr: int, to_addr: int) -> bytes:
         return self.data[addr : to_addr + 1]
 
-    def print(self, from_addr: int, to_addr: int) -> None:
+    def print(self, from_addr: int, to_addr: int) -> str:
         data: bytes = self.read_to_bytes(from_addr, to_addr)
 
-        log.debug("%s", " " * 9 + " ".join(f"{i:02X}" for i in range(16)))
+        lines: list[str] = [" " * 9 + " ".join(f"{i:02X}" for i in range(16))]
 
         data_offset: int = 0
         line_offset: int = from_addr % 0x10
@@ -353,13 +349,15 @@ class Rom:
             line_offset += 1
 
             if line_offset == 0x10:
-                log.debug("%s", out)
+                lines.append(out)
                 out = ""
                 line_offset = 0
 
         if out:
             out += " .." * (0x10 - line_offset)
-            log.debug("%s", out)
+            lines.append(out)
+
+        return "\n".join(lines)
 
 
 class Header:
@@ -400,22 +398,23 @@ class Header:
         self.b_header_checksum: int = rom.read_u8(HEADER_CHECKSUM)
         self.b_global_checksum: int = rom.read_u16(GLOBAL_CHECKSUM[0])
 
-    def info(self) -> None:
-        log.info("Entry Point: %s", self.b_entry_point.hex().upper())
-        log.info("Nintendo Logo: %s", self.b_nintendo_logo.hex().upper())
-        log.info("Title: %s", self.title)
-        log.info("Manufacturer Code: %s", self.manufacturer_code)
-        log.info("CGB Flag: %s", hex(self.b_cgb_flag).upper())
-        log.info("SGB Flag: %s", hex(self.b_sgb_flag).upper())
-        log.info("Cartridge Type: %s", self.cartridge_type)
-        log.info("ROM Size: %s", self.rom_size)
-        log.info("ROM Banks: %s", self.rom_banks)
-        log.info("RAM Size: %s", self.ram_size)
-        log.info("Destination Code: %s", self.destination_code)
-        log.info("Licensee Code: %s", self.licensee_code)
-        log.info(
-            "Mask ROM Version Number: %s",
-            hex(self.b_mask_rom_version_number).upper(),
+    def info(self) -> str:
+        return "\n".join(
+            [
+                f"Entry Point: {self.b_entry_point.hex().upper()}",
+                f"Nintendo Logo: {self.b_nintendo_logo.hex().upper()}",
+                f"Title: {self.title}",
+                f"Manufacturer Code: {self.manufacturer_code}",
+                f"CGB Flag: {hex(self.b_cgb_flag).upper()}",
+                f"SGB Flag: {hex(self.b_sgb_flag).upper()}",
+                f"Cartridge Type: {self.cartridge_type}",
+                f"ROM Size: {self.rom_size}",
+                f"ROM Banks: {self.rom_banks}",
+                f"RAM Size: {self.ram_size}",
+                f"Destination Code: {self.destination_code}",
+                f"Licensee Code: {self.licensee_code}",
+                f"Mask ROM Version Number: {hex(self.b_mask_rom_version_number).upper()}",
+                f"Header Checksum: {hex(self.b_header_checksum).upper()}",
+                f"Global Checksum: {hex(self.b_global_checksum).upper()}",
+            ]
         )
-        log.info("Header Checksum: %s", hex(self.b_header_checksum).upper())
-        log.info("Global Checksum: %s", hex(self.b_global_checksum).upper())

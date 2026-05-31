@@ -2,9 +2,6 @@
 import threading
 import numpy as np
 import pygame
-import logger
-
-log = logger.get("APU")
 
 SAMPLE_RATE = 44100
 GB_CLOCK = 4194304
@@ -363,8 +360,6 @@ class APU:
     # ── register read/write ───────────────────────────────────────────────────
 
     def write(self, addr: int, val: int) -> None:
-        log.debug("APU WRITE 0x%04X = 0x%02X", addr, val)
-
         # APU enable gate — only NR52 and wave RAM are writable when off
         if not (self.nr52 & 0x80) and addr != 0xFF26 and not (0xFF30 <= addr <= 0xFF3F):
             return
@@ -589,4 +584,3 @@ class APU:
         for ch in (self.ch1, self.ch2, self.ch3, self.ch4):
             ch.enabled = False
         self.nr50 = self.nr51 = 0
-        log.info("APU reset")

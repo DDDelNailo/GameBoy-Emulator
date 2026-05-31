@@ -1,8 +1,5 @@
 import time
 import atexit
-import logger
-
-log = logger.get("PERF")
 
 
 class PerfMonitor:
@@ -100,13 +97,8 @@ class PerfMonitor:
         max_ms = max(frame_times) * 1000
         fps = 1.0 / (sum(frame_times) / n)
 
-        log.debug("── %s (%d frames) ──────────────────", title, n)
-        log.debug(
-            "  frame   avg=%.2f ms  max=%.2f ms  fps=%.1f",
-            avg_ms,
-            max_ms,
-            fps,
-        )
+        print(f"── {title} ({n} frames) ──────────────────")
+        print(f"  frame   avg={avg_ms:.2f} ms  max={max_ms:.2f} ms  fps={fps:.1f}")
 
         total = sum(timings.values()) or 1.0
 
@@ -118,15 +110,9 @@ class PerfMonitor:
             pct = (elapsed / total) * 100
             per_call = (elapsed / calls) * 1_000_000
 
-            log.debug(
-                "  %-12s %5.1f%%  %6.1f µs/call  (%d calls)",
-                name,
-                pct,
-                per_call,
-                calls,
-            )
+            print(f"  {name:<12} {pct:5.1f}%  {per_call:6.1f} µs/call  ({calls} calls)")
 
-        log.debug("──────────────────────────────────────────────────")
+        print("──────────────────────────────────────────────────")
 
 
 perf = PerfMonitor()

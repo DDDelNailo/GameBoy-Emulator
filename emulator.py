@@ -6,10 +6,6 @@ from ppu import PPU
 from timer import Timer
 from joypad import Joypad
 
-import logger
-
-log = logger.get("Emulator")
-
 import perf as perf_module
 
 p = perf_module.perf
@@ -19,7 +15,6 @@ SCALE = 1
 
 class Emulator:
     def __init__(self, rom_path: str, boot_rom_path: str) -> None:
-        log.info("Loading ROM %s", rom_path)
         self.mmu: MMU = MMU(rom_path, boot_rom_path)
         self.cpu: CPU = CPU(self.mmu)
         self.ppu: PPU = PPU(self.mmu)
@@ -37,15 +32,12 @@ class Emulator:
         self._screen_surf = pygame.Surface((160 * SCALE, 144 * SCALE))
 
     def step(self) -> int:
-        if self.cpu.log_from is not None and self.cpu.pc == self.cpu.log_from:
-            logger.setup(level=logger.DEBUG)
-
         t = p.begin("cpu")
         cycles: int = self.cpu.step()
         p.end("cpu", t)
 
         if cycles == 0:
-            log.error("CPU step returned 0 cycles, which is invalid")
+            print("CPU step returned 0 cycles, which is invalid")
             exit()
 
         t = p.begin("ppu")
@@ -63,8 +55,6 @@ class Emulator:
         return cycles
 
     def run(self) -> None:
-        log.info("Starting emulator loop")
-
         running = True
         while running:
             p.frame_start()

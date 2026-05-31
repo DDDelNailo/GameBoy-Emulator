@@ -1,8 +1,5 @@
-import logger
 from mmu import MMU
 import numpy as np
-
-log = logger.get("PPU")
 
 # STAT modes
 MODE_HBLANK = 0
@@ -46,19 +43,10 @@ class PPU:
             MODE_DRAW: "DRAW",
         }
 
-        log.debug("PPU initialized")
-
     def step(self, cycles: int) -> None:
         lcdc: int = self.mmu.read_u8(0xFF40)
-        log.debug(
-            "PPU step %d cycles (mode=%s LY=%d)",
-            cycles,
-            self._mode_names.get(self.mode, self.mode),
-            self.ly,
-        )
 
         if not (lcdc & 0x80):  # LCD disabled
-            log.debug("LCD disabled - skipping PPU step")
             return
 
         # self.frame_ready = False
@@ -80,14 +68,12 @@ class PPU:
                 self.cycles -= HBLANK_CYCLES
                 self.ly += 1
                 self.mmu.write_u8(0xFF44, self.ly)
-                log.debug("LY -> %d", self.ly)
                 self._check_lyc()
 
                 if self.ly == VBLANK_LINE:
                     self._set_mode(MODE_VBLANK)
                     self._trigger_vblank()
                     self.frame_ready = True
-                    log.debug("Frame ready at LY=%d", self.ly)
                 else:
                     self._set_mode(MODE_OAM)
 
@@ -100,43 +86,33 @@ class PPU:
                 if self.ly >= TOTAL_LINES:
                     self.ly = 0
                     self.mmu.write_u8(0xFF44, 0)
-                    log.debug("LY reset to 0")
                     self._set_mode(MODE_OAM)
 
     def _set_mode(self, mode: int) -> None:
         self.mode = mode
         stat: int = self.mmu.read_u8(0xFF41)
         self.mmu.write_u8(0xFF41, (stat & 0xFC) | mode)
-        log.debug("Mode -> %s", self._mode_names.get(mode, mode))
 
     def _check_lyc(self) -> None:
         lyc: int = self.mmu.read_u8(0xFF45)
         stat: int = self.mmu.read_u8(0xFF41)
         if self.ly == lyc:
             self.mmu.write_u8(0xFF41, stat | 0x04)
-            log.debug("LY==LYC (%d) - STAT LYC flag set", self.ly)
         else:
             self.mmu.write_u8(0xFF41, stat & ~0x04)
-            log.debug("LY!=LYC (%d vs %d) - STAT LYC flag cleared", self.ly, lyc)
 
     def _trigger_vblank(self) -> None:
         if_: int = self.mmu.read_u8(0xFF0F)
         self.mmu.write_u8(0xFF0F, if_ | 0x01)
-        log.debug("VBlank triggered at LY=%d", self.ly)
 
     def _render_scanline(self) -> None:
         lcdc: int = self.mmu.read_u8(0xFF40)
         if not (lcdc & 0x01):  # BG disabled
-            log.debug("BG disabled at LY=%d - skipping render", self.ly)
             return
 
         scy: int = self.mmu.read_u8(0xFF42)
         scx: int = self.mmu.read_u8(0xFF43)
         bgp: int = self.mmu.read_u8(0xFF47)  # background palette
-
-        log.debug(
-            "Render scanline LY=%d SCX=%d SCY=%d BGP=0x%02X", self.ly, scx, scy, bgp
-        )
 
         y: int = (self.ly + scy) & 0xFF  # which row in the full 256x256 BG map
 
