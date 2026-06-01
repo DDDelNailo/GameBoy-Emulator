@@ -188,50 +188,6 @@ class CPU:
             else:
                 self.cb_table[int(pattern, 2)] = func
 
-    def flag_z(self) -> int:
-        return (self.f >> 7) & 1
-
-    def flag_n(self) -> int:
-        return (self.f >> 6) & 1
-
-    def flag_h(self) -> int:
-        return (self.f >> 5) & 1
-
-    def flag_c(self) -> int:
-        return (self.f >> 4) & 1
-
-    def set_flags(
-        self,
-        z: int | None = None,
-        n: int | None = None,
-        h: int | None = None,
-        c: int | None = None,
-    ) -> None:
-        flags: bytearray = bytearray()
-
-        if z is not None:
-            flags.append(0x80 if z & 1 else 0x00)
-        if n is not None:
-            flags.append(0x40 if n & 1 else 0x00)
-        if h is not None:
-            flags.append(0x20 if h & 1 else 0x00)
-        if c is not None:
-            flags.append(0x10 if c & 1 else 0x00)
-
-        self.f = sum(flags) & 0xF0
-
-    def advance_pc(self, n: int = 1) -> None:
-        self.pc = (self.pc + n) & 0xFFFF
-
-    def get_advance_pc_u8(self) -> int:
-        self.advance_pc(1)
-        return self.mmu.read_u8(self.pc)
-
-    def get_advance_pc_u16(self) -> int:
-        lo = self.get_advance_pc_u8()
-        hi = self.get_advance_pc_u8()
-        return lo | (hi << 8)
-
     @staticmethod
     def to_signed_u8(v: int) -> int:
         return v - 0x100 if v & 0x80 else v
@@ -247,7 +203,7 @@ class CPU:
         cycles: int = self.execute(opcode)
 
         if not self.pc_jumped:
-            self.advance_pc()
+            self.pc = (self.pc + 1) & 0xFFFF
 
         return cycles
 
@@ -266,7 +222,12 @@ class CPU:
 
     def _op_ld_r16_imm16(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 4) & 0b11
-        imm16: int = self.get_advance_pc_u16()
+        # inline get_advance_pc_u16
+        self.pc = (self.pc + 1) & 0xFFFF
+        lo: int = self.mmu.read_u8(self.pc)
+        self.pc = (self.pc + 1) & 0xFFFF
+        hi: int = self.mmu.read_u8(self.pc)
+        imm16: int = lo | (hi << 8)
 
         match dest_reg:
             case 0:
@@ -418,11 +379,12 @@ class CPU:
             print(f"Invalid r8 register code: {r8}")
             exit()
 
-        self.set_flags(
-            z=(value & 0xFF) == 0,
-            n=0,
-            h=(original & 0x0F) == 0x0F,
-        )
+        self.f = (
+            (int(value & 0xFF == 0) << 7)
+            | (0 << 6)
+            | (int((original & 0x0F) == 0x0F) << 5)
+            | (0 << 4)
+        ) & 0xF0
 
         return 4
 
@@ -467,17 +429,19 @@ class CPU:
             print(f"Invalid r8 register code: {r8}")
             exit()
 
-        self.set_flags(
-            z=(value & 0xFF) == 0,
-            n=1,
-            h=(original & 0x0F) == 0x00,
-        )
+        self.f = (
+            (int(value & 0xFF == 0) << 7)
+            | (1 << 6)
+            | (int((original & 0x0F) == 0x00) << 5)
+            | (0 << 4)
+        ) & 0xF0
 
         return 4
 
     def _op_ld_r8_imm8(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 3) & 0b111
-        imm8: int = self.get_advance_pc_u8()
+        self.pc = (self.pc + 1) & 0xFFFF
+        imm8: int = self.mmu.read_u8(self.pc)
 
         if dest_reg == 0:
             self.b = imm8 & 0xFF
@@ -507,14 +471,9 @@ class CPU:
 
     def _op_rla(self, opcode: int) -> int:
         carry: int = (self.a >> 7) & 1
-        self.a = ((self.a << 1) | self.flag_c()) & 0xFF
+        self.a = ((self.a << 1) | ((self.f >> 4) & 1)) & 0xFF
 
-        self.set_flags(
-            z=0,
-            n=0,
-            h=0,
-            c=carry,
-        )
+        self.f = ((0 << 7) | (0 << 6) | (0 << 5) | (carry << 4)) & 0xF0
 
         return 8
 
@@ -534,7 +493,8 @@ class CPU:
     #     return 0
 
     def _op_jr_imm8(self, opcode: int) -> int:
-        imm8: int = self.to_signed_u8(self.get_advance_pc_u8())
+        self.pc = (self.pc + 1) & 0xFFFF
+        imm8: int = self.to_signed_u8(self.mmu.read_u8(self.pc))
         jump: int = (self.pc + imm8) & 0xFFFF
 
         self.pc = (jump + 1) & 0xFFFF
@@ -545,23 +505,24 @@ class CPU:
     def _op_jr_cond_imm8(self, opcode: int) -> int:
         cond_code: int = (opcode >> 3) & 0b11
         cond: str = ADDRESSES["cond"][cond_code]
-        imm8: int = self.to_signed_u8(self.get_advance_pc_u8())
+        self.pc = (self.pc + 1) & 0xFFFF
+        imm8: int = self.to_signed_u8(self.mmu.read_u8(self.pc))
 
         jump: int = (self.pc + imm8) & 0xFFFF
 
         cc: bool = False
         match cond:
             case "nz":
-                if not self.flag_z():
+                if (self.f & 0x80) == 0:
                     cc = True
             case "z":
-                if self.flag_z():
+                if (self.f & 0x80) != 0:
                     cc = True
             case "nc":
-                if not self.flag_c():
+                if (self.f & 0x10) == 0:
                     cc = True
             case "c":
-                if self.flag_c():
+                if (self.f & 0x10) != 0:
                     cc = True
             case _:
                 print(f"Invalid condition code: {cond_code}")
@@ -666,12 +627,12 @@ class CPU:
         result: int = (self.a - value) & 0xFF
         self.a = result & 0xFF
 
-        self.set_flags(
-            z=result == 0,
-            n=1,
-            h=(result & 0x0F) < (value & 0x0F),
-            c=result < value,
-        )
+        self.f = (
+            (int(result == 0) << 7)
+            | (1 << 6)
+            | (int((result & 0x0F) < (value & 0x0F)) << 5)
+            | (int(result < value) << 4)
+        ) & 0xF0
 
         return 4
 
@@ -710,12 +671,7 @@ class CPU:
 
         self.a = (self.a ^ value) & 0xFF
 
-        self.set_flags(
-            z=self.a == 0,
-            n=0,
-            h=0,
-            c=0,
-        )
+        self.f = ((int(self.a == 0) << 7) | (0 << 6) | (0 << 5) | (0 << 4)) & 0xF0
         return 4
 
     # def _op_or_a_r8(self, opcode: int) -> int:
@@ -746,16 +702,17 @@ class CPU:
     #     return 0
 
     def _op_cp_a_imm8(self, opcode: int) -> int:
-        imm8: int = self.get_advance_pc_u8()
+        self.pc = (self.pc + 1) & 0xFFFF
+        imm8: int = self.mmu.read_u8(self.pc)
 
         result: int = (self.a - imm8) & 0xFF
 
-        self.set_flags(
-            z=result == 0,
-            n=1,
-            h=(self.a & 0x0F) < (imm8 & 0x0F),
-            c=self.a < imm8,
-        )
+        self.f = (
+            (int(result == 0) << 7)
+            | (1 << 6)
+            | (int((self.a & 0x0F) < (imm8 & 0x0F)) << 5)
+            | (int(self.a < imm8) << 4)
+        ) & 0xF0
 
         return 8
 
@@ -790,9 +747,15 @@ class CPU:
     #     return 0
 
     def _op_call_imm16(self, opcode: int) -> int:
-        imm16: int = self.get_advance_pc_u16()
+        # inline get_advance_pc_u16
+        self.pc = (self.pc + 1) & 0xFFFF
+        lo: int = self.mmu.read_u8(self.pc)
+        self.pc = (self.pc + 1) & 0xFFFF
+        hi: int = self.mmu.read_u8(self.pc)
+        imm16: int = lo | (hi << 8)
 
-        self.advance_pc()
+        # advance past opcode (original code called self.advance_pc())
+        self.pc = (self.pc + 1) & 0xFFFF
 
         self.sp = (self.sp - 1) & 0xFFFF
         self.mmu.write_u8(self.sp, self.pc >> 8 & 0xFF)
@@ -862,7 +825,8 @@ class CPU:
         return 16
 
     def _op_PREFIX(self, opcode: int) -> int:
-        opcode = self.get_advance_pc_u8()
+        self.pc = (self.pc + 1) & 0xFFFF
+        opcode = self.mmu.read_u8(self.pc)
         return self.execute(opcode, prefix=True)
 
     def _op_ldh_p_c_a(self, opcode: int) -> int:
@@ -873,7 +837,8 @@ class CPU:
         return 8
 
     def _op_ldh_p_imm8_a(self, opcode: int) -> int:
-        imm8: int = self.get_advance_pc_u8()
+        self.pc = (self.pc + 1) & 0xFFFF
+        imm8: int = self.mmu.read_u8(self.pc)
         addr: int = 0xFF00 + imm8
 
         self.mmu.write_u8(addr, self.a)
@@ -881,7 +846,11 @@ class CPU:
         return 12
 
     def _op_ld_p_imm16_a(self, opcode: int) -> int:
-        imm16: int = self.get_advance_pc_u16()
+        self.pc = (self.pc + 1) & 0xFFFF
+        lo: int = self.mmu.read_u8(self.pc)
+        self.pc = (self.pc + 1) & 0xFFFF
+        hi: int = self.mmu.read_u8(self.pc)
+        imm16: int = lo | (hi << 8)
 
         self.mmu.write_u8(imm16, self.a)
 
@@ -891,7 +860,8 @@ class CPU:
     #     return 0
 
     def _op_ldh_a_p_imm8(self, opcode: int) -> int:
-        imm8: int = self.get_advance_pc_u8()
+        self.pc = (self.pc + 1) & 0xFFFF
+        imm8: int = self.mmu.read_u8(self.pc)
         addr: int = 0xFF00 + imm8
 
         value: int = self.mmu.read_u8(addr)
@@ -951,7 +921,7 @@ class CPU:
             exit()
 
         carry: int = (value >> 7) & 1
-        value = ((value << 1) | self.flag_c()) & 0xFF
+        value = ((value << 1) | ((self.f >> 4) & 1)) & 0xFF
 
         if r8 == "(hl)":
             addr: int = (self.h << 8) | self.l
@@ -974,12 +944,7 @@ class CPU:
             print(f"Invalid destination r8 register code: {r8}")
             exit()
 
-        self.set_flags(
-            z=value == 0,
-            n=0,
-            h=0,
-            c=carry,
-        )
+        self.f = ((0 << 7) | (0 << 6) | (0 << 5) | (carry << 4)) & 0xF0
 
         return 8
 
@@ -1026,12 +991,9 @@ class CPU:
             print(f"Invalid r8 register code: {r8}")
             exit()
 
-        self.set_flags(
-            z=(value & (1 << bit)) == 0,
-            n=0,
-            h=1,
-            c=None,
-        )
+        self.f = (
+            ((value & (1 << bit)) == 0) << 7 | (0 << 6) | (1 << 5) | (0 << 4)
+        ) & 0xF0
 
         return 8
 
