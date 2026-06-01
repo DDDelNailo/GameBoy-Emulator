@@ -1,5 +1,6 @@
 from mmu import MMU
 import numpy as np
+from ppu_fast import render_bg_scanline
 
 # STAT modes
 MODE_HBLANK = 0
@@ -17,14 +18,14 @@ TOTAL_LINES = 154
 
 
 class PPU:
-    PALETTE: np.ndarray = np.array(
+    PALETTE = np.array(
         [
-            [255, 255, 255],
-            [170, 170, 170],
-            [85, 85, 85],
-            [0, 0, 0],
+            0xFFFFFFFF,
+            0xFFAAAAAA,
+            0xFF555555,
+            0xFF000000,
         ],
-        dtype=np.uint8,
+        dtype=np.uint32,
     )
 
     def __init__(self, mmu: MMU) -> None:
@@ -32,9 +33,7 @@ class PPU:
         self.cycles: int = 0
         self.ly: int = 0
         self.mode: int = MODE_OAM
-        self.framebuffer: np.ndarray = np.full(
-            (144, 160, 3), (255, 255, 255), dtype=np.uint8
-        )
+        self.framebuffer = np.zeros((144, 160), dtype=np.uint32)
         self.frame_ready: bool = False
         self._mode_names = {
             MODE_HBLANK: "HBLANK",
@@ -42,6 +41,27 @@ class PPU:
             MODE_OAM: "OAM",
             MODE_DRAW: "DRAW",
         }
+
+        self.tile_lut = np.zeros(
+            (256, 256, 8),
+            dtype=np.uint8,
+        )
+
+        for byte1 in range(256):
+            for byte2 in range(256):
+                for bit in range(8):
+                    self.tile_lut[byte1, byte2, bit] = (
+                        ((byte2 >> (7 - bit)) & 1) << 1
+                    ) | ((byte1 >> (7 - bit)) & 1)
+
+        self.palette_lut = np.zeros(
+            (256, 4),
+            dtype=np.uint8,
+        )
+
+        for bgp in range(256):
+            for color in range(4):
+                self.palette_lut[bgp, color] = (bgp >> (color * 2)) & 0x03
 
     def step(self, cycles: int) -> None:
         lcdc: int = self.mmu.read_u8(0xFF40)
@@ -114,42 +134,15 @@ class PPU:
         scx: int = self.mmu.read_u8(0xFF43)
         bgp: int = self.mmu.read_u8(0xFF47)  # background palette
 
-        y: int = (self.ly + scy) & 0xFF  # which row in the full 256x256 BG map
-
-        # Which tilemap: LCDC bit 3 selects $9C00 vs $9800
-        tilemap_base: int = 0x9C00 if (lcdc & 0x08) else 0x9800
-
-        vram: np.ndarray = self.mmu.vram_np
-
-        xs: np.ndarray = np.arange(160, dtype=np.uint16)
-        pxs: np.ndarray = (xs + scx) & 0xFF
-
-        tile_cols: np.ndarray = pxs >> 3
-        tile_row: int = y >> 3
-
-        # BG tile map offsets inside VRAM
-        tilemap_offsets: np.ndarray = (tilemap_base - 0x8000) + tile_row * 32 + tile_cols
-
-        tile_ids: np.ndarray = vram[tilemap_offsets].astype(np.int16)
-
-        # Tile addressing
-        tile_data_offsets: np.ndarray
-        if lcdc & 0x10:
-            tile_data_offsets = tile_ids * 16
-        else:
-            signed_ids: np.ndarray = np.where(tile_ids > 127, tile_ids - 256, tile_ids)
-            tile_data_offsets = 0x1000 + signed_ids * 16
-            # because 0x9000 - 0x8000 = 0x1000
-
-        row_in_tile: int = (y & 7) * 2
-
-        byte1s: np.ndarray = vram[tile_data_offsets + row_in_tile]
-        byte2s: np.ndarray = vram[tile_data_offsets + row_in_tile + 1]
-
-        bits: np.ndarray = 7 - (pxs & 7)
-
-        color_ids: np.ndarray = (((byte2s >> bits) & 1) << 1) | ((byte1s >> bits) & 1)
-
-        shades: np.ndarray = (bgp >> (color_ids * 2)) & 0x03
-
-        self.framebuffer[self.ly] = self.PALETTE[shades]
+        render_bg_scanline(
+            self.mmu.vram_np,
+            self.framebuffer,
+            self.PALETTE,
+            self.tile_lut,
+            self.palette_lut,
+            self.ly,
+            scx,
+            scy,
+            lcdc,
+            bgp,
+        )

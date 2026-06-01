@@ -1,5 +1,4 @@
 import pygame
-import numpy as np
 from mmu import MMU
 from cpu import CPU
 from ppu import PPU
@@ -10,26 +9,32 @@ import perf as perf_module
 
 p = perf_module.perf
 
-SCALE = 1
-
 
 class Emulator:
     def __init__(self, rom_path: str, boot_rom_path: str) -> None:
+        pygame.init()
+
         self.mmu: MMU = MMU(rom_path, boot_rom_path)
         self.cpu: CPU = CPU(self.mmu)
         self.ppu: PPU = PPU(self.mmu)
         self.timer: Timer = Timer(self.mmu)
         self.joypad: Joypad = Joypad(self.mmu)
 
-        pygame.init()
-        self.screen: pygame.Surface = pygame.display.set_mode(
-            (160 * SCALE, 144 * SCALE)
+        self.screen = pygame.display.set_mode(
+            (160, 144),
+            pygame.SCALED | pygame.RESIZABLE,
         )
         pygame.display.set_caption("GameBoy Emulator")
         self.clock: pygame.time.Clock = pygame.time.Clock()
 
-        self._fb_array = np.zeros((144, 160, 3), dtype=np.uint8)
-        self._screen_surf = pygame.Surface((160 * SCALE, 144 * SCALE))
+        self._screen_surf = pygame.Surface(
+            (160, 144),
+            depth=32,
+        )
+        self._scaled_surf = pygame.Surface(
+            self.screen.get_size(),
+            depth=32,
+        )
 
     def step(self) -> int:
         t = p.begin("cpu")
@@ -79,8 +84,18 @@ class Emulator:
             self.clock.tick(60)
 
     def _blit(self) -> None:
-        np.copyto(self._fb_array, self.ppu.framebuffer)
-        surf = pygame.surfarray.make_surface(self._fb_array.transpose(1, 0, 2))
-        pygame.transform.scale(surf, (160 * SCALE, 144 * SCALE), self._screen_surf)
-        self.screen.blit(self._screen_surf, (0, 0))
+        surf_array = pygame.surfarray.pixels2d(self._screen_surf)
+
+        surf_array[:, :] = self.ppu.framebuffer.T
+
+        del surf_array
+
+        pygame.transform.scale(
+            self._screen_surf,
+            self.screen.get_size(),
+            self._scaled_surf,
+        )
+
+        self.screen.blit(self._scaled_surf, (0, 0))
+
         pygame.display.flip()

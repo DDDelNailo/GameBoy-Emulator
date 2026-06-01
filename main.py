@@ -18,3 +18,4 @@ if __name__ == "__main__":
     emulator = Emulator("roms/Tetris.gb", "roms/boot/dmg_boot.bin")
     # emulator = Emulator("roms/Pokemon - Red Version.gb", "roms/boot/dmg_boot.bin")
     emulator.run()
+

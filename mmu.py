@@ -15,6 +15,9 @@ class MMU:
         self.ie: int = 0  # 1 byte IE register
 
         self.apu: APU = APU()
+                
+        self.vram_np = np.frombuffer(self.vram, dtype=np.uint8)
+        self.io_np = np.frombuffer(self.io, dtype=np.uint8)
 
         self.io[0xFF40 - 0xFF00] = 0x91  # LCDC — LCD on, BG on
         self.io[0xFF47 - 0xFF00] = 0xFC  # BGP  — default palette
@@ -22,14 +25,6 @@ class MMU:
         with open(boot_rom_path, "rb") as f:
             self.boot_rom: bytes = f.read()
             self.boot_rom_active: bool = True
-
-    @property
-    def vram_np(self) -> np.ndarray:
-        return np.frombuffer(self.vram, dtype=np.uint8)
-
-    @property
-    def io_np(self) -> np.ndarray:
-        return np.frombuffer(self.io, dtype=np.uint8)
 
     def read_u8(self, addr: int) -> int:
         data: int
