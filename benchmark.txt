@@ -1,0 +1,19 @@
+── perf report (60 frames) ──────────────────
+  frame   avg=23.76 ms  max=27.23 ms  fps=42.1
+  cpu           34.5%     0.7 µs/call  (395672 calls)
+  apu           31.5%     0.6 µs/call  (395672 calls)
+  ppu           24.4%     0.5 µs/call  (395672 calls)
+  timer          6.1%     0.1 µs/call  (395672 calls)
+  blit           2.0%   260.7 µs/call  (60 calls)
+  apu_flush      1.4%   183.7 µs/call  (60 calls)
+──────────────────────────────────────────────────
+CPU step returned 0 cycles, which is invalid
+── lifetime perf report (333 frames) ──────────────────
+  frame   avg=24.15 ms  max=183.40 ms  fps=41.4
+  cpu           34.5%     0.7 µs/call  (2199102 calls)
+  apu           28.1%     0.6 µs/call  (2199101 calls)
+  ppu           27.9%     0.5 µs/call  (2199101 calls)
+  timer          6.1%     0.1 µs/call  (2199101 calls)
+  blit           2.1%   272.9 µs/call  (333 calls)
+  apu_flush      1.4%   176.0 µs/call  (333 calls)
+──────────────────────────────────────────────────
