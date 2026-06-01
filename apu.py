@@ -1,4 +1,3 @@
-# apu.py
 import threading
 import numpy as np
 import pygame
@@ -54,7 +53,7 @@ class Channel1:
     @property
     def _freq_period(self) -> int:
         period = ((self.nr14 & 0x07) << 8) | self.nr13
-        return (2048 - period) * 4
+        return (2048 - int(period)) * 4
 
     def trigger(self) -> None:
         self.enabled = self.dac_enabled
@@ -154,7 +153,8 @@ class Channel2:
     @property
     def _freq_period(self) -> int:
         period = ((self.nr24 & 0x07) << 8) | self.nr23
-        return (2048 - period) * 4
+
+        return (2048 - int(period)) * 4
 
     def trigger(self) -> None:
         self.enabled = self.dac_enabled
@@ -553,8 +553,8 @@ class APU:
         vol_r = (self.nr50 & 0x07) + 1
 
         # panning from NR51
-        l = mixed * vol_l if (self.nr51 & 0xF0) else 0
-        r = mixed * vol_r if (self.nr51 & 0x0F) else 0
+        l = int(mixed * vol_l) if (self.nr51 & 0xF0) else 0
+        r = int(mixed * vol_r) if (self.nr51 & 0x0F) else 0
 
         # scale to int16 range
         scale = 32767 // (60 * 8)

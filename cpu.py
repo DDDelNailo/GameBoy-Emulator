@@ -1,5 +1,15 @@
+import numpy as np
 from mmu import MMU
 from typing import Callable
+
+REG_B = 0
+REG_C = 1
+REG_D = 2
+REG_E = 3
+REG_H = 4
+REG_L = 5
+REG_F = 6
+REG_A = 7
 
 
 class CPU:
@@ -7,18 +17,10 @@ class CPU:
         self.mmu: MMU = mmu
         self.pc: int = 0x0000
         self.sp: int = 0x0000
-        self.a: int = 0x00
-        self.b: int = 0x00
-        self.c: int = 0x00
-        self.d: int = 0x00
-        self.e: int = 0x00
-        self.f: int = 0x00
-        self.h: int = 0x00
-        self.l: int = 0x00
-
+        self.u8_regs: np.ndarray = np.zeros(8, dtype=np.uint8)
         self.pc_jumped: bool = False
-
         self.ime: bool = False
+
         self.op_table: list[Callable[[int], int]] = [self._op_unimplemented] * 256
         self.cb_table: list[Callable[[int], int]] = [self._op_unimplemented] * 256
         self.op_codes: dict[str, Callable[[int], int]] = {
@@ -95,7 +97,7 @@ class CPU:
             # "........": self._op_sra_r8,
             # "........": self._op_swap_r8,
             # "........": self._op_srl_r8,
-            "01xxxyyy": self.bit_b3_r8,
+            "01xxxyyy": self._op_bit_b_r8,
             # "........": self.res_b3_r8,
             # "........": self.set_b3_r8,
         }
@@ -184,7 +186,6 @@ class CPU:
 
     def _op_ld_r16_imm16(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 4) & 0b11
-        # inline get_advance_pc_u16
         self.pc = (self.pc + 1) & 0xFFFF
         lo: int = self.mmu.read_u8(self.pc)
         self.pc = (self.pc + 1) & 0xFFFF
@@ -193,14 +194,14 @@ class CPU:
 
         match dest_reg:
             case 0:
-                self.b = (imm16 >> 8) & 0xFF
-                self.c = imm16 & 0xFF
+                self.u8_regs[REG_B] = imm16 >> 8
+                self.u8_regs[REG_C] = imm16 & 0xFF
             case 1:
-                self.d = (imm16 >> 8) & 0xFF
-                self.e = imm16 & 0xFF
+                self.u8_regs[REG_D] = imm16 >> 8
+                self.u8_regs[REG_E] = imm16 & 0xFF
             case 2:
-                self.h = (imm16 >> 8) & 0xFF
-                self.l = imm16 & 0xFF
+                self.u8_regs[REG_H] = imm16 >> 8
+                self.u8_regs[REG_L] = imm16 & 0xFF
             case 3:
                 self.sp = imm16 & 0xFFFF
             case _:
@@ -213,24 +214,24 @@ class CPU:
         src_reg: int = (opcode >> 4) & 0b11
 
         if src_reg == 0:
-            addr: int = (self.b << 8) | self.c
+            addr: int = (int(self.u8_regs[REG_B]) << 8) | int(self.u8_regs[REG_C])
         elif src_reg == 1:
-            addr: int = (self.d << 8) | self.e
+            addr: int = (int(self.u8_regs[REG_D]) << 8) | int(self.u8_regs[REG_E])
         elif src_reg == 2:
-            addr = (self.h << 8) | self.l
+            addr = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             hl: int = (addr + 1) & 0xFFFF
-            self.h = (hl >> 8) & 0xFF
-            self.l = hl & 0xFF
+            self.u8_regs[REG_H] = hl >> 8
+            self.u8_regs[REG_L] = hl & 0xFF
         elif src_reg == 3:
-            addr = (self.h << 8) | self.l
+            addr = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             hl = (addr - 1) & 0xFFFF
-            self.h = (hl >> 8) & 0xFF
-            self.l = hl & 0xFF
+            self.u8_regs[REG_H] = hl >> 8
+            self.u8_regs[REG_L] = hl & 0xFF
         else:
             print(f"Invalid r16mem register code: {src_reg}")
             exit()
 
-        self.mmu.write_u8(addr, self.a)
+        self.mmu.write_u8(addr, self.u8_regs[REG_A])
 
         return 8
 
@@ -238,25 +239,25 @@ class CPU:
         src_reg: int = (opcode >> 4) & 0b11
 
         if src_reg == 0:
-            addr: int = (self.b << 8) | self.c
+            addr: int = (int(self.u8_regs[REG_B]) << 8) | int(self.u8_regs[REG_C])
         elif src_reg == 1:
-            addr: int = (self.d << 8) | self.e
+            addr: int = (int(self.u8_regs[REG_D]) << 8) | int(self.u8_regs[REG_E])
         elif src_reg == 2:
-            addr = (self.h << 8) | self.l
+            addr = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             hl: int = (addr + 1) & 0xFFFF
-            self.h = (hl >> 8) & 0xFF
-            self.l = hl & 0xFF
+            self.u8_regs[REG_H] = hl >> 8
+            self.u8_regs[REG_L] = hl & 0xFF
         elif src_reg == 3:
-            addr = (self.h << 8) | self.l
+            addr = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             hl = (addr - 1) & 0xFFFF
-            self.h = (hl >> 8) & 0xFF
-            self.l = hl & 0xFF
+            self.u8_regs[REG_H] = hl >> 8
+            self.u8_regs[REG_L] = hl & 0xFF
         else:
             print(f"Invalid r16mem register code: {src_reg}")
             exit()
 
         value: int = self.mmu.read_u8(addr)
-        self.a = value & 0xFF
+        self.u8_regs[REG_A] = value
 
         return 8
 
@@ -268,20 +269,23 @@ class CPU:
 
         match dest_reg:
             case 0:
-                value: int = ((self.b << 8) | self.c) + 1
-                value &= 0xFFFF
-                self.b = (value >> 8) & 0xFF
-                self.c = value & 0xFF
+                value: int = (
+                    (int(self.u8_regs[REG_B]) << 8) | int(self.u8_regs[REG_C])
+                ) + 1
+                self.u8_regs[REG_B] = value >> 8
+                self.u8_regs[REG_C] = value & 0xFF
             case 1:
-                value = ((self.d << 8) | self.e) + 1
-                value &= 0xFFFF
-                self.d = (value >> 8) & 0xFF
-                self.e = value & 0xFF
+                value: int = (
+                    (int(self.u8_regs[REG_D]) << 8) | int(self.u8_regs[REG_E])
+                ) + 1
+                self.u8_regs[REG_D] = value >> 8
+                self.u8_regs[REG_E] = value & 0xFF
             case 2:
-                value = ((self.h << 8) | self.l) + 1
-                value &= 0xFFFF
-                self.h = (value >> 8) & 0xFF
-                self.l = value & 0xFF
+                value: int = (
+                    (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+                ) + 1
+                self.u8_regs[REG_H] = value >> 8
+                self.u8_regs[REG_L] = value & 0xFF
             case 3:
                 self.sp = (self.sp + 1) & 0xFFFF
             case _:
@@ -300,46 +304,49 @@ class CPU:
         dest_reg: int = (opcode >> 3) & 0b111
         mmu_read = self.mmu.read_u8
         mmu_write = self.mmu.write_u8
+        value: int = 0
+        original: int
+        addr: int
 
         if dest_reg == 6:  # (hl)
-            addr: int = (self.h << 8) | self.l
-            original: int = mmu_read(addr)
-            value: int = original + 1
+            addr = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+            original = mmu_read(addr)
+            value = original + 1
             mmu_write(addr, value & 0xFF)
         elif dest_reg == 7:  # a
-            original = self.a
+            original = self.u8_regs[REG_A]
             value = original + 1
-            self.a = value & 0xFF
+            self.u8_regs[REG_A] = value
         elif dest_reg == 0:  # b
-            original = self.b
+            original = self.u8_regs[REG_B]
             value = original + 1
-            self.b = value & 0xFF
+            self.u8_regs[REG_B] = value
         elif dest_reg == 1:  # c
-            original = self.c
+            original = self.u8_regs[REG_C]
             value = original + 1
-            self.c = value & 0xFF
+            self.u8_regs[REG_C] = value
         elif dest_reg == 2:  # d
-            original = self.d
+            original = self.u8_regs[REG_D]
             value = original + 1
-            self.d = value & 0xFF
+            self.u8_regs[REG_D] = value
         elif dest_reg == 3:  # e
-            original = self.e
+            original = self.u8_regs[REG_E]
             value = original + 1
-            self.e = value & 0xFF
+            self.u8_regs[REG_E] = value
         elif dest_reg == 4:  # h
-            original = self.h
+            original = self.u8_regs[REG_H]
             value = original + 1
-            self.h = value & 0xFF
+            self.u8_regs[REG_H] = value
         elif dest_reg == 5:  # l
-            original = self.l
+            original = self.u8_regs[REG_L]
             value = original + 1
-            self.l = value & 0xFF
+            self.u8_regs[REG_L] = value
         else:
             print(f"Invalid r8 register code: {dest_reg}")
             exit()
 
         self.f = (
-            (int(value & 0xFF == 0) << 7)
+            (int(value == 0) << 7)
             | (0 << 6)
             | (int((original & 0x0F) == 0x0F) << 5)
             | (0 << 4)
@@ -351,46 +358,47 @@ class CPU:
         dest_reg: int = (opcode >> 3) & 0b111
         mmu_read = self.mmu.read_u8
         mmu_write = self.mmu.write_u8
+        value: int = 0
 
         if dest_reg == 6:  # (hl)
-            addr: int = (self.h << 8) | self.l
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             original: int = mmu_read(addr)
-            value: int = original - 1
+            value = original - 1
             mmu_write(addr, value & 0xFF)
         elif dest_reg == 7:  # a
-            original = self.a
+            original = int(self.u8_regs[REG_A])
             value = original - 1
-            self.a = value & 0xFF
+            self.u8_regs[REG_A] = value
         elif dest_reg == 0:  # b
-            original = self.b
+            original = int(self.u8_regs[REG_B])
             value = original - 1
-            self.b = value & 0xFF
+            self.u8_regs[REG_B] = value
         elif dest_reg == 1:  # c
-            original = self.c
+            original = int(self.u8_regs[REG_C])
             value = original - 1
-            self.c = value & 0xFF
+            self.u8_regs[REG_C] = value
         elif dest_reg == 2:  # d
-            original = self.d
+            original = int(self.u8_regs[REG_D])
             value = original - 1
-            self.d = value & 0xFF
+            self.u8_regs[REG_D] = value
         elif dest_reg == 3:  # e
-            original = self.e
+            original = int(self.u8_regs[REG_E])
             value = original - 1
-            self.e = value & 0xFF
+            self.u8_regs[REG_E] = value
         elif dest_reg == 4:  # h
-            original = self.h
+            original = int(self.u8_regs[REG_H])
             value = original - 1
-            self.h = value & 0xFF
+            self.u8_regs[REG_H] = value
         elif dest_reg == 5:  # l
-            original = self.l
+            original = int(self.u8_regs[REG_L])
             value = original - 1
-            self.l = value & 0xFF
+            self.u8_regs[REG_L] = value
         else:
             print(f"Invalid r8 register code: {dest_reg}")
             exit()
 
         self.f = (
-            (int(value & 0xFF == 0) << 7)
+            (int(value == 0) << 7)
             | (1 << 6)
             | (int((original & 0x0F) == 0x00) << 5)
             | (0 << 4)
@@ -404,19 +412,19 @@ class CPU:
         imm8: int = self.mmu.read_u8(self.pc)
 
         if dest_reg == 0:
-            self.b = imm8 & 0xFF
+            self.u8_regs[REG_B] = imm8
         elif dest_reg == 1:
-            self.c = imm8 & 0xFF
+            self.u8_regs[REG_C] = imm8
         elif dest_reg == 2:
-            self.d = imm8 & 0xFF
+            self.u8_regs[REG_D] = imm8
         elif dest_reg == 3:
-            self.e = imm8 & 0xFF
+            self.u8_regs[REG_E] = imm8
         elif dest_reg == 4:
-            self.h = imm8 & 0xFF
+            self.u8_regs[REG_H] = imm8
         elif dest_reg == 5:
-            self.l = imm8 & 0xFF
+            self.u8_regs[REG_L] = imm8
         elif dest_reg == 7:
-            self.a = imm8 & 0xFF
+            self.u8_regs[REG_A] = imm8
         else:
             print(f"Invalid r8 register code: {dest_reg}")
             exit()
@@ -430,8 +438,10 @@ class CPU:
     #     return 0
 
     def _op_rla(self, opcode: int) -> int:
-        carry: int = (self.a >> 7) & 1
-        self.a = ((self.a << 1) | ((self.f >> 4) & 1)) & 0xFF
+        carry: int = (int(self.u8_regs[REG_A]) >> 7) & 1
+        self.u8_regs[REG_A] = (int(self.u8_regs[REG_A]) << 1) & 0xFF | (
+            (self.f >> 4) & 1
+        )
 
         self.f = ((0 << 7) | (0 << 6) | (0 << 5) | (carry << 4)) & 0xF0
 
@@ -506,44 +516,44 @@ class CPU:
 
         # source
         if src_reg == 6:  # (hl)
-            addr: int = (self.h << 8) | self.l
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             value: int = mmu_read(addr)
         elif src_reg == 7:
-            value = self.a
+            value = self.u8_regs[REG_A]
         elif src_reg == 0:
-            value = self.b
+            value = self.u8_regs[REG_B]
         elif src_reg == 1:
-            value = self.c
+            value = self.u8_regs[REG_C]
         elif src_reg == 2:
-            value = self.d
+            value = self.u8_regs[REG_D]
         elif src_reg == 3:
-            value = self.e
+            value = self.u8_regs[REG_E]
         elif src_reg == 4:
-            value = self.h
+            value = self.u8_regs[REG_H]
         elif src_reg == 5:
-            value = self.l
+            value = self.u8_regs[REG_L]
         else:
             print(f"Invalid source r8 register code: {src_reg}")
             exit()
 
         # destination
         if dest_reg == 6:  # (hl)
-            addr: int = (self.h << 8) | self.l
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             mmu_write(addr, value)
         elif dest_reg == 7:
-            self.a = value & 0xFF
+            self.u8_regs[REG_A] = value
         elif dest_reg == 0:
-            self.b = value & 0xFF
+            self.u8_regs[REG_B] = value
         elif dest_reg == 1:
-            self.c = value & 0xFF
+            self.u8_regs[REG_C] = value
         elif dest_reg == 2:
-            self.d = value & 0xFF
+            self.u8_regs[REG_D] = value
         elif dest_reg == 3:
-            self.e = value & 0xFF
+            self.u8_regs[REG_E] = value
         elif dest_reg == 4:
-            self.h = value & 0xFF
+            self.u8_regs[REG_H] = value
         elif dest_reg == 5:
-            self.l = value & 0xFF
+            self.u8_regs[REG_L] = value
         else:
             print(f"Invalid destination r8 register code: {dest_reg}")
             exit()
@@ -565,28 +575,28 @@ class CPU:
 
         value: int = 0
         if src_reg == 6:
-            addr: int = (self.h << 8) | self.l
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             value: int = mmu_read(addr)
         elif src_reg == 7:
-            value = self.a
+            value = self.u8_regs[REG_A]
         elif src_reg == 0:
-            value = self.b
+            value = self.u8_regs[REG_B]
         elif src_reg == 1:
-            value = self.c
+            value = self.u8_regs[REG_C]
         elif src_reg == 2:
-            value = self.d
+            value = self.u8_regs[REG_D]
         elif src_reg == 3:
-            value = self.e
+            value = self.u8_regs[REG_E]
         elif src_reg == 4:
-            value = self.h
+            value = self.u8_regs[REG_H]
         elif src_reg == 5:
-            value = self.l
+            value = self.u8_regs[REG_L]
         else:
             print(f"Invalid r8 register code: {src_reg}")
             exit()
 
-        result: int = (self.a - value) & 0xFF
-        self.a = result & 0xFF
+        result: int = self.u8_regs[REG_A] - value
+        self.u8_regs[REG_A] = result
 
         self.f = (
             (int(result == 0) << 7)
@@ -610,29 +620,31 @@ class CPU:
         value: int = 0
 
         if src_reg == 6:
-            addr: int = (self.h << 8) | self.l
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             value: int = mmu_read(addr)
         elif src_reg == 7:
-            value = self.a
+            value = self.u8_regs[REG_A]
         elif src_reg == 0:
-            value = self.b
+            value = self.u8_regs[REG_B]
         elif src_reg == 1:
-            value = self.c
+            value = self.u8_regs[REG_C]
         elif src_reg == 2:
-            value = self.d
+            value = self.u8_regs[REG_D]
         elif src_reg == 3:
-            value = self.e
+            value = self.u8_regs[REG_E]
         elif src_reg == 4:
-            value = self.h
+            value = self.u8_regs[REG_H]
         elif src_reg == 5:
-            value = self.l
+            value = self.u8_regs[REG_L]
         else:
             print(f"Invalid r8 register code: {src_reg}")
             exit()
 
-        self.a = (self.a ^ value) & 0xFF
+        self.u8_regs[REG_A] = self.u8_regs[REG_A] ^ value
 
-        self.f = ((int(self.a == 0) << 7) | (0 << 6) | (0 << 5) | (0 << 4)) & 0xF0
+        self.f = (
+            (int(self.u8_regs[REG_A] == 0) << 7) | (0 << 6) | (0 << 5) | (0 << 4)
+        ) & 0xF0
         return 4
 
     # def _op_or_a_r8(self, opcode: int) -> int:
@@ -666,13 +678,13 @@ class CPU:
         self.pc = (self.pc + 1) & 0xFFFF
         imm8: int = self.mmu.read_u8(self.pc)
 
-        result: int = (self.a - imm8) & 0xFF
+        result: int = int(self.u8_regs[REG_A]) - imm8
 
         self.f = (
             (int(result == 0) << 7)
             | (1 << 6)
-            | (int((self.a & 0x0F) < (imm8 & 0x0F)) << 5)
-            | (int(self.a < imm8) << 4)
+            | (int((self.u8_regs[REG_A] & 0x0F) < (imm8 & 0x0F)) << 5)
+            | (int(self.u8_regs[REG_A] < imm8) << 4)
         ) & 0xF0
 
         return 8
@@ -715,11 +727,11 @@ class CPU:
         hi: int = self.mmu.read_u8(self.pc)
         imm16: int = lo | (hi << 8)
 
-        # advance past opcode (original code called self.advance_pc())
+        # advance past opcode (original code called self.regs[REG_A]dvance_pc())
         self.pc = (self.pc + 1) & 0xFFFF
 
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write_u8(self.sp, self.pc >> 8 & 0xFF)
+        self.mmu.write_u8(self.sp, self.pc >> 8)
         self.sp = (self.sp - 1) & 0xFFFF
         self.mmu.write_u8(self.sp, self.pc & 0xFF)
 
@@ -741,16 +753,16 @@ class CPU:
         value: int = (high << 8) | low
 
         if dest_reg == 0:  # bc
-            self.b = (value >> 8) & 0xFF
-            self.c = value & 0xFF
+            self.u8_regs[REG_B] = (value >> 8) & 0xFF
+            self.u8_regs[REG_C] = value & 0xFF
         elif dest_reg == 1:  # de
-            self.d = (value >> 8) & 0xFF
-            self.e = value & 0xFF
+            self.u8_regs[REG_D] = (value >> 8) & 0xFF
+            self.u8_regs[REG_E] = value & 0xFF
         elif dest_reg == 2:  # hl
-            self.h = (value >> 8) & 0xFF
-            self.l = value & 0xFF
+            self.u8_regs[REG_H] = (value >> 8) & 0xFF
+            self.u8_regs[REG_L] = value & 0xFF
         elif dest_reg == 3:  # af
-            self.a = (value >> 8) & 0xFF
+            self.u8_regs[REG_A] = (value >> 8) & 0xFF
             self.f = value & 0xF0
         else:
             print(f"Invalid r16stk register code: {dest_reg}")
@@ -761,19 +773,19 @@ class CPU:
     def _op_push_r16stk(self, opcode: int) -> int:
         src_reg: int = (opcode >> 4) & 0b11
         if src_reg == 0:  # bc
-            value: int = (self.b << 8) | self.c
+            value: int = (int(self.u8_regs[REG_B]) << 8) | int(self.u8_regs[REG_C])
         elif src_reg == 1:  # de
-            value = (self.d << 8) | self.e
+            value = (int(self.u8_regs[REG_D]) << 8) | int(self.u8_regs[REG_E])
         elif src_reg == 2:  # hl
-            value = (self.h << 8) | self.l
+            value = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
         elif src_reg == 3:  # af
-            value = (self.a << 8) | self.f
+            value = (int(self.u8_regs[REG_A]) << 8) | self.f
         else:
             print(f"Invalid r16stk register code: {src_reg}")
             exit()
 
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write_u8(self.sp, (value >> 8) & 0xFF)
+        self.mmu.write_u8(self.sp, value >> 8)
         self.sp = (self.sp - 1) & 0xFFFF
         self.mmu.write_u8(self.sp, value & 0xFF)
 
@@ -785,9 +797,9 @@ class CPU:
         return self.execute(opcode, prefix=True)
 
     def _op_ldh_p_c_a(self, opcode: int) -> int:
-        addr: int = 0xFF00 + self.c
+        addr: int = 0xFF00 + int(self.u8_regs[REG_C])
 
-        self.mmu.write_u8(addr, self.a)
+        self.mmu.write_u8(addr, self.u8_regs[REG_A])
 
         return 8
 
@@ -796,7 +808,7 @@ class CPU:
         imm8: int = self.mmu.read_u8(self.pc)
         addr: int = 0xFF00 + imm8
 
-        self.mmu.write_u8(addr, self.a)
+        self.mmu.write_u8(addr, self.u8_regs[REG_A])
 
         return 12
 
@@ -807,7 +819,7 @@ class CPU:
         hi: int = self.mmu.read_u8(self.pc)
         imm16: int = lo | (hi << 8)
 
-        self.mmu.write_u8(imm16, self.a)
+        self.mmu.write_u8(imm16, self.u8_regs[REG_A])
 
         return 16
 
@@ -820,7 +832,7 @@ class CPU:
         addr: int = 0xFF00 + imm8
 
         value: int = self.mmu.read_u8(addr)
-        self.a = value & 0xFF
+        self.u8_regs[REG_A] = value
 
         return 12
 
@@ -856,46 +868,46 @@ class CPU:
         value: int = 0
 
         if dest_reg == 6:
-            addr: int = (self.h << 8) | self.l
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             value: int = mmu_read(addr)
         elif dest_reg == 7:
-            value = self.a
+            value = self.u8_regs[REG_A]
         elif dest_reg == 0:
-            value = self.b
+            value = self.u8_regs[REG_B]
         elif dest_reg == 1:
-            value = self.c
+            value = self.u8_regs[REG_C]
         elif dest_reg == 2:
-            value = self.d
+            value = self.u8_regs[REG_D]
         elif dest_reg == 3:
-            value = self.e
+            value = self.u8_regs[REG_E]
         elif dest_reg == 4:
-            value = self.h
+            value = self.u8_regs[REG_H]
         elif dest_reg == 5:
-            value = self.l
+            value = self.u8_regs[REG_L]
         else:
             print(f"Invalid r8 register code: {dest_reg}")
             exit()
 
-        carry: int = (value >> 7) & 1
-        value = ((value << 1) | ((self.f >> 4) & 1)) & 0xFF
+        carry: int = (int(value) >> 7) & 1
+        value = (int(value) << 1) | ((self.f >> 4) & 1)
 
         if dest_reg == 6:
-            addr: int = (self.h << 8) | self.l
-            mmu_write(addr, value)
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+            mmu_write(addr, value & 0xFF)
         elif dest_reg == 7:
-            self.a = value & 0xFF
+            self.u8_regs[REG_A] = value & 0xFF
         elif dest_reg == 0:
-            self.b = value & 0xFF
+            self.u8_regs[REG_B] = value & 0xFF
         elif dest_reg == 1:
-            self.c = value & 0xFF
+            self.u8_regs[REG_C] = value & 0xFF
         elif dest_reg == 2:
-            self.d = value & 0xFF
+            self.u8_regs[REG_D] = value & 0xFF
         elif dest_reg == 3:
-            self.e = value & 0xFF
+            self.u8_regs[REG_E] = value & 0xFF
         elif dest_reg == 4:
-            self.h = value & 0xFF
+            self.u8_regs[REG_H] = value & 0xFF
         elif dest_reg == 5:
-            self.l = value & 0xFF
+            self.u8_regs[REG_L] = value & 0xFF
         else:
             print(f"Invalid destination r8 register code: {dest_reg}")
             exit()
@@ -919,7 +931,7 @@ class CPU:
     # def _op_srl_r8(self, opcode: int) -> int:
     #     return 0
 
-    def bit_b3_r8(self, opcode: int) -> int:
+    def _op_bit_b_r8(self, opcode: int) -> int:
         bit: int = (opcode >> 3) & 0b111
         src_reg: int = opcode & 0b111
         mmu_read = self.mmu.read_u8
@@ -927,22 +939,22 @@ class CPU:
         value: int = 0
 
         if src_reg == 6:
-            addr: int = (self.h << 8) | self.l
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             value = mmu_read(addr)
         elif src_reg == 7:
-            value = self.a
+            value = self.u8_regs[REG_A]
         elif src_reg == 0:
-            value = self.b
+            value = self.u8_regs[REG_B]
         elif src_reg == 1:
-            value = self.c
+            value = self.u8_regs[REG_C]
         elif src_reg == 2:
-            value = self.d
+            value = self.u8_regs[REG_D]
         elif src_reg == 3:
-            value = self.e
+            value = self.u8_regs[REG_E]
         elif src_reg == 4:
-            value = self.h
+            value = self.u8_regs[REG_H]
         elif src_reg == 5:
-            value = self.l
+            value = self.u8_regs[REG_L]
         else:
             print(f"Invalid r8 register code: {src_reg}")
             exit()
