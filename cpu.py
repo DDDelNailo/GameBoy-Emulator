@@ -231,7 +231,7 @@ class CPU:
             print(f"Invalid r16mem register code: {src_reg}")
             exit()
 
-        self.mmu.write_u8(addr, self.u8_regs[REG_A])
+        self.mmu.write_u8(addr, int(self.u8_regs[REG_A]))
 
         return 8
 
@@ -302,17 +302,17 @@ class CPU:
 
     def _op_inc_r8(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 3) & 0b111
-        mmu_read = self.mmu.read_u8
-        mmu_write = self.mmu.write_u8
+        mmu_read_u8 = self.mmu.read_u8
+        mmu_write_u8 = self.mmu.write_u8
         value: int = 0
         original: int
         addr: int
 
         if dest_reg == 6:  # (hl)
             addr = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            original = mmu_read(addr)
+            original = mmu_read_u8(addr)
             value = original + 1
-            mmu_write(addr, value & 0xFF)
+            mmu_write_u8(addr, value & 0xFF)
         elif dest_reg == 7:  # a
             original = self.u8_regs[REG_A]
             value = original + 1
@@ -356,43 +356,43 @@ class CPU:
 
     def _op_dec_r8(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 3) & 0b111
-        mmu_read = self.mmu.read_u8
-        mmu_write = self.mmu.write_u8
+        mmu_read_u8 = self.mmu.read_u8
+        mmu_write_u8 = self.mmu.write_u8
         value: int = 0
 
         if dest_reg == 6:  # (hl)
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            original: int = mmu_read(addr)
+            original: int = mmu_read_u8(addr)
             value = original - 1
-            mmu_write(addr, value & 0xFF)
+            mmu_write_u8(addr, value & 0xFF)
         elif dest_reg == 7:  # a
             original = int(self.u8_regs[REG_A])
             value = original - 1
-            self.u8_regs[REG_A] = value
+            self.u8_regs[REG_A] = value & 0xFF
         elif dest_reg == 0:  # b
             original = int(self.u8_regs[REG_B])
             value = original - 1
-            self.u8_regs[REG_B] = value
+            self.u8_regs[REG_B] = value & 0xFF
         elif dest_reg == 1:  # c
             original = int(self.u8_regs[REG_C])
             value = original - 1
-            self.u8_regs[REG_C] = value
+            self.u8_regs[REG_C] = value & 0xFF
         elif dest_reg == 2:  # d
             original = int(self.u8_regs[REG_D])
             value = original - 1
-            self.u8_regs[REG_D] = value
+            self.u8_regs[REG_D] = value & 0xFF
         elif dest_reg == 3:  # e
             original = int(self.u8_regs[REG_E])
             value = original - 1
-            self.u8_regs[REG_E] = value
+            self.u8_regs[REG_E] = value & 0xFF
         elif dest_reg == 4:  # h
             original = int(self.u8_regs[REG_H])
             value = original - 1
-            self.u8_regs[REG_H] = value
+            self.u8_regs[REG_H] = value & 0xFF
         elif dest_reg == 5:  # l
             original = int(self.u8_regs[REG_L])
             value = original - 1
-            self.u8_regs[REG_L] = value
+            self.u8_regs[REG_L] = value & 0xFF
         else:
             print(f"Invalid r8 register code: {dest_reg}")
             exit()
@@ -509,15 +509,15 @@ class CPU:
     def _op_ld_r8_r8(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 3) & 0b111
         src_reg: int = opcode & 0b111
-        mmu_read = self.mmu.read_u8
-        mmu_write = self.mmu.write_u8
+        mmu_read_u8 = self.mmu.read_u8
+        mmu_write_u8 = self.mmu.write_u8
 
         value: int = 0
 
         # source
         if src_reg == 6:  # (hl)
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            value: int = mmu_read(addr)
+            value: int = mmu_read_u8(addr)
         elif src_reg == 7:
             value = self.u8_regs[REG_A]
         elif src_reg == 0:
@@ -539,7 +539,7 @@ class CPU:
         # destination
         if dest_reg == 6:  # (hl)
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            mmu_write(addr, value)
+            mmu_write_u8(addr, value)
         elif dest_reg == 7:
             self.u8_regs[REG_A] = value
         elif dest_reg == 0:
@@ -571,12 +571,12 @@ class CPU:
 
     def _op_sub_a_r8(self, opcode: int) -> int:
         src_reg: int = opcode & 0b111
-        mmu_read = self.mmu.read_u8
+        mmu_read_u8 = self.mmu.read_u8
 
         value: int = 0
         if src_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            value: int = mmu_read(addr)
+            value: int = mmu_read_u8(addr)
         elif src_reg == 7:
             value = self.u8_regs[REG_A]
         elif src_reg == 0:
@@ -615,13 +615,13 @@ class CPU:
 
     def _op_xor_a_r8(self, opcode: int) -> int:
         src_reg: int = opcode & 0b111
-        mmu_read = self.mmu.read_u8
+        mmu_read_u8 = self.mmu.read_u8
 
         value: int = 0
 
         if src_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            value: int = mmu_read(addr)
+            value: int = mmu_read_u8(addr)
         elif src_reg == 7:
             value = self.u8_regs[REG_A]
         elif src_reg == 0:
@@ -731,9 +731,9 @@ class CPU:
         self.pc = (self.pc + 1) & 0xFFFF
 
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write_u8(self.sp, self.pc >> 8)
+        self.mmu.write_u8(self.sp, int(self.pc >> 8))
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write_u8(self.sp, self.pc & 0xFF)
+        self.mmu.write_u8(self.sp, int(self.pc & 0xFF))
 
         self.pc = imm16 & 0xFFFF
         self.pc_jumped = True
@@ -785,9 +785,9 @@ class CPU:
             exit()
 
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write_u8(self.sp, value >> 8)
+        self.mmu.write_u8(self.sp, int(value >> 8))
         self.sp = (self.sp - 1) & 0xFFFF
-        self.mmu.write_u8(self.sp, value & 0xFF)
+        self.mmu.write_u8(self.sp, int(value & 0xFF))
 
         return 16
 
@@ -799,7 +799,7 @@ class CPU:
     def _op_ldh_p_c_a(self, opcode: int) -> int:
         addr: int = 0xFF00 + int(self.u8_regs[REG_C])
 
-        self.mmu.write_u8(addr, self.u8_regs[REG_A])
+        self.mmu.write_u8(addr, int(self.u8_regs[REG_A]))
 
         return 8
 
@@ -808,7 +808,7 @@ class CPU:
         imm8: int = self.mmu.read_u8(self.pc)
         addr: int = 0xFF00 + imm8
 
-        self.mmu.write_u8(addr, self.u8_regs[REG_A])
+        self.mmu.write_u8(addr, int(self.u8_regs[REG_A]))
 
         return 12
 
@@ -862,14 +862,14 @@ class CPU:
 
     def _op_rl_r8(self, opcode: int) -> int:
         dest_reg: int = opcode & 0b111
-        mmu_read = self.mmu.read_u8
-        mmu_write = self.mmu.write_u8
+        mmu_read_u8 = self.mmu.read_u8
+        mmu_write_u8 = self.mmu.write_u8
 
         value: int = 0
 
         if dest_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            value: int = mmu_read(addr)
+            value: int = mmu_read_u8(addr)
         elif dest_reg == 7:
             value = self.u8_regs[REG_A]
         elif dest_reg == 0:
@@ -893,7 +893,7 @@ class CPU:
 
         if dest_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            mmu_write(addr, value & 0xFF)
+            mmu_write_u8(addr, value & 0xFF)
         elif dest_reg == 7:
             self.u8_regs[REG_A] = value & 0xFF
         elif dest_reg == 0:
@@ -934,13 +934,13 @@ class CPU:
     def _op_bit_b_r8(self, opcode: int) -> int:
         bit: int = (opcode >> 3) & 0b111
         src_reg: int = opcode & 0b111
-        mmu_read = self.mmu.read_u8
+        mmu_read_u8 = self.mmu.read_u8
 
         value: int = 0
 
         if src_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
-            value = mmu_read(addr)
+            value = mmu_read_u8(addr)
         elif src_reg == 7:
             value = self.u8_regs[REG_A]
         elif src_reg == 0:

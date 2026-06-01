@@ -53,7 +53,7 @@ class Channel1:
     @property
     def _freq_period(self) -> int:
         period = ((self.nr14 & 0x07) << 8) | self.nr13
-        return (2048 - int(period)) * 4
+        return (2048 - period) * 4
 
     def trigger(self) -> None:
         self.enabled = self.dac_enabled
@@ -154,7 +154,7 @@ class Channel2:
     def _freq_period(self) -> int:
         period = ((self.nr24 & 0x07) << 8) | self.nr23
 
-        return (2048 - int(period)) * 4
+        return (2048 - period) * 4
 
     def trigger(self) -> None:
         self.enabled = self.dac_enabled
