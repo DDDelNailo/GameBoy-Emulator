@@ -1,6 +1,7 @@
 from mmu import MMU
 from typing import Callable
 
+# TODO: remove addresses dict and check manually inside functions
 ADDRESSES: dict[str, dict[int, str]] = {
     "r8": {
         0b000: "b",
@@ -42,244 +43,150 @@ ADDRESSES: dict[str, dict[int, str]] = {
 class CPU:
     def __init__(self, mmu: MMU) -> None:
         self.mmu: MMU = mmu
-        self._pc: int = 0x0000
-        self._sp: int = 0x0000
-        self._a: int = 0x00
-        self._b: int = 0x00
-        self._c: int = 0x00
-        self._d: int = 0x00
-        self._e: int = 0x00
-        self._f: int = 0x00
-        self._h: int = 0x00
-        self._l: int = 0x00
+        self.pc: int = 0x0000
+        self.sp: int = 0x0000
+        self.a: int = 0x00
+        self.b: int = 0x00
+        self.c: int = 0x00
+        self.d: int = 0x00
+        self.e: int = 0x00
+        self.f: int = 0x00
+        self.h: int = 0x00
+        self.l: int = 0x00
 
         self.pc_jumped: bool = False
 
         self.ime: bool = False
-        self.op_codes: dict[str, Callable[[int], int]] = self.build_op_codes(
-            {
-                # "00000000": self._op_nop,
-                "00rr0001": self._op_ld_r16_imm16,
-                "00rr0010": self._op_ld_p_r16mem_a,
-                "00rr1010": self._op_ld_a_p_r16mem,
-                # "........": self._op_ld_p_imm16_sp,
-                "00rr0011": self._op_inc_r16,
-                # "00rr1011": self._op_dec_r16,
-                # "........": self._op_add_hl_r16,
-                "00ttt100": self._op_inc_r8,
-                "00ttt101": self._op_dec_r8,
-                "00ttt110": self._op_ld_r8_imm8,
-                # "........": self._op_rlca,
-                # "........": self._op_rrca,
-                "00010111": self._op_rla,
-                # "........": self._op_rra,
-                # "........": self._op_daa,
-                # "........": self._op_cpl,
-                # "........": self._op_scf,
-                # "........": self._op_ccf,
-                "00011000": self._op_jr_imm8,
-                "001rr000": self._op_jr_cond_imm8,
-                # "........": self._op_stop,
-                "01xxxyyy": self._op_ld_r8_r8,
-                # "........": self._op_halt,
-                # "........": self._op_add_a_r8,
-                # "........": self._op_adc_a_r8,
-                "10010ttt": self._op_sub_a_r8,
-                # "........": self._op_sbc_a_r8,
-                # "........": self._op_and_a_r8,
-                "10101ttt": self._op_xor_a_r8,
-                # "........": self._op_or_a_r8,
-                "10111110": self._op_cp_a_r8,
-                # "........": self._op_add_a_imm8,
-                # "........": self._op_adc_a_imm8,
-                # "........": self._op_sub_a_imm8,
-                # "........": self._op_sbc_a_imm8,
-                # "........": self._op_and_a_imm8,
-                # "........": self._op_xor_a_imm8,
-                # "........": self._op_or_a_imm8,
-                "11111110": self._op_cp_a_imm8,
-                # "........": self._op_ret_cond,
-                "11001001": self._op_ret,
-                # "........": self._op_reti,
-                # "........": self._op_jp_cond_imm16,
-                # "........": self._op_jp_imm16,
-                # "........": self._op_jp_hl,
-                # "........": self._op_call_cond_imm16,
-                "11001101": self._op_call_imm16,
-                # "........": self._op_rst_tgt3,
-                "11rr0001": self._op_pop_r16stk,
-                "11rr0101": self._op_push_r16stk,
-                "11001011": self._op_PREFIX,
-                "11100010": self._op_ldh_p_c_a,
-                "11100000": self._op_ldh_p_imm8_a,
-                "11101010": self._op_ld_p_imm16_a,
-                # "........": self._op_ldh_a_p_c,
-                "11110000": self._op_ldh_a_p_imm8,
-                # "........": self._op_ld_a_imm16,
-                # "........": self._op_add_sp_imm8,
-                # "........": self._op_ld_hl_sp_plus_imm8,
-                # "........": self._op_ld_sp_hl,
-                # "........": self._op_di,
-                # "........": self._op_ei,
-            }
-        )
-        self.prefix_op_codes: dict[str, Callable[[int], int]] = self.build_op_codes(
-            {
-                # "........": self._op_rlc_r8,
-                # "........": self._op_rrc_r8,
-                "00010ttt": self._op_rl_r8,
-                # "........": self._op_rr_r8,
-                # "........": self._op_sla_r8,
-                # "........": self._op_sra_r8,
-                # "........": self._op_swap_r8,
-                # "........": self._op_srl_r8,
-                "01xxxyyy": self.bit_b3_r8,
-                # "........": self.res_b3_r8,
-                # "........": self.set_b3_r8,
-            }
-        )
+        self.op_table: list[Callable[[int], int]] = [self._op_unimplemented] * 256
+        self.cb_table: list[Callable[[int], int]] = [self._op_unimplemented] * 256
+        self.op_codes: dict[str, Callable[[int], int]] = {
+            # "00000000": self._op_nop,
+            "00rr0001": self._op_ld_r16_imm16,
+            "00rr0010": self._op_ld_p_r16mem_a,
+            "00rr1010": self._op_ld_a_p_r16mem,
+            # "........": self._op_ld_p_imm16_sp,
+            "00rr0011": self._op_inc_r16,
+            # "00rr1011": self._op_dec_r16,
+            # "........": self._op_add_hl_r16,
+            "00ttt100": self._op_inc_r8,
+            "00ttt101": self._op_dec_r8,
+            "00ttt110": self._op_ld_r8_imm8,
+            # "........": self._op_rlca,
+            # "........": self._op_rrca,
+            "00010111": self._op_rla,
+            # "........": self._op_rra,
+            # "........": self._op_daa,
+            # "........": self._op_cpl,
+            # "........": self._op_scf,
+            # "........": self._op_ccf,
+            "00011000": self._op_jr_imm8,
+            "001rr000": self._op_jr_cond_imm8,
+            # "........": self._op_stop,
+            "01xxxyyy": self._op_ld_r8_r8,
+            # "........": self._op_halt,
+            # "........": self._op_add_a_r8,
+            # "........": self._op_adc_a_r8,
+            "10010ttt": self._op_sub_a_r8,
+            # "........": self._op_sbc_a_r8,
+            # "........": self._op_and_a_r8,
+            "10101ttt": self._op_xor_a_r8,
+            # "........": self._op_or_a_r8,
+            "10111110": self._op_cp_a_r8,
+            # "........": self._op_add_a_imm8,
+            # "........": self._op_adc_a_imm8,
+            # "........": self._op_sub_a_imm8,
+            # "........": self._op_sbc_a_imm8,
+            # "........": self._op_and_a_imm8,
+            # "........": self._op_xor_a_imm8,
+            # "........": self._op_or_a_imm8,
+            "11111110": self._op_cp_a_imm8,
+            # "........": self._op_ret_cond,
+            "11001001": self._op_ret,
+            # "........": self._op_reti,
+            # "........": self._op_jp_cond_imm16,
+            # "........": self._op_jp_imm16,
+            # "........": self._op_jp_hl,
+            # "........": self._op_call_cond_imm16,
+            "11001101": self._op_call_imm16,
+            # "........": self._op_rst_tgt3,
+            "11rr0001": self._op_pop_r16stk,
+            "11rr0101": self._op_push_r16stk,
+            "11001011": self._op_PREFIX,
+            "11100010": self._op_ldh_p_c_a,
+            "11100000": self._op_ldh_p_imm8_a,
+            "11101010": self._op_ld_p_imm16_a,
+            # "........": self._op_ldh_a_p_c,
+            "11110000": self._op_ldh_a_p_imm8,
+            # "........": self._op_ld_a_imm16,
+            # "........": self._op_add_sp_imm8,
+            # "........": self._op_ld_hl_sp_plus_imm8,
+            # "........": self._op_ld_sp_hl,
+            # "........": self._op_di,
+            # "........": self._op_ei,
+        }
+        self.cb_codes: dict[str, Callable[[int], int]] = {
+            # "........": self._op_rlc_r8,
+            # "........": self._op_rrc_r8,
+            "00010ttt": self._op_rl_r8,
+            # "........": self._op_rr_r8,
+            # "........": self._op_sla_r8,
+            # "........": self._op_sra_r8,
+            # "........": self._op_swap_r8,
+            # "........": self._op_srl_r8,
+            "01xxxyyy": self.bit_b3_r8,
+            # "........": self.res_b3_r8,
+            # "........": self.set_b3_r8,
+        }
 
-    @staticmethod
-    def build_op_codes(
-        op_codes_base: dict[str, Callable[[int], int]],
-    ) -> dict[str, Callable[[int], int]]:
-        op_codes: dict[str, Callable[[int], int]] = {}
+        self.build_op_codes()
+        self.build_cb_codes()
 
-        for pattern, func in op_codes_base.items():
+    def build_op_codes(self) -> None:
+        for pattern, func in self.op_codes.items():
             if "r" in pattern:
                 for r in range(4):
-                    op_codes[pattern.replace("rr", format(r, "02b"))] = func
-            if "t" in pattern:
+                    self.op_table[int(pattern.replace("rr", format(r, "02b")), 2)] = (
+                        func
+                    )
+            elif "t" in pattern:
                 for t in range(8):
-                    op_codes[pattern.replace("ttt", format(t, "03b"))] = func
+                    self.op_table[int(pattern.replace("ttt", format(t, "03b")), 2)] = (
+                        func
+                    )
             elif "x" in pattern and "y" in pattern:
                 for x in range(8):
                     for y in range(8):
-                        op_codes[
-                            pattern.replace("xxx", format(x, "03b")).replace(
-                                "yyy", format(y, "03b")
+                        self.op_table[
+                            int(
+                                pattern.replace("xxx", format(x, "03b")).replace(
+                                    "yyy", format(y, "03b")
+                                ),
+                                2,
                             )
                         ] = func
             else:
-                op_codes[pattern] = func
+                self.op_table[int(pattern, 2)] = func
 
-        return op_codes
-
-    @property
-    def pc(self) -> int:
-        return self._pc
-
-    @pc.setter
-    def pc(self, v: int):
-        self._pc = v & 0xFFFF
-
-    @property
-    def a(self) -> int:
-        return self._a
-
-    @a.setter
-    def a(self, v: int):
-        self._a = v & 0xFF
-
-    @property
-    def b(self) -> int:
-        return self._b
-
-    @b.setter
-    def b(self, v: int):
-        self._b = v & 0xFF
-
-    @property
-    def c(self) -> int:
-        return self._c
-
-    @c.setter
-    def c(self, v: int):
-        self._c = v & 0xFF
-
-    @property
-    def d(self) -> int:
-        return self._d
-
-    @d.setter
-    def d(self, v: int):
-        self._d = v & 0xFF
-
-    @property
-    def e(self) -> int:
-        return self._e
-
-    @e.setter
-    def e(self, v: int):
-        self._e = v & 0xFF
-
-    @property
-    def f(self) -> int:
-        return self._f
-
-    @f.setter
-    def f(self, v: int):
-        self._f = v & 0xFF
-
-    @property
-    def h(self) -> int:
-        return self._h
-
-    @h.setter
-    def h(self, v: int):
-        self._h = v & 0xFF
-
-    @property
-    def l(self) -> int:
-        return self._l
-
-    @l.setter
-    def l(self, v: int):
-        self._l = v & 0xFF
-
-    @property
-    def sp(self) -> int:
-        return self._sp
-
-    @sp.setter
-    def sp(self, v: int):
-        self._sp = v & 0xFFFF
-
-    @property
-    def af(self) -> int:
-        return (self.a << 8) | self.f
-
-    @af.setter
-    def af(self, v: int):
-        self.a = (v >> 8) & 0xFF
-        self.f = v & 0xF0  # low nibble always 0
-
-    @property
-    def hl(self) -> int:
-        return (self.h << 8) | self.l
-
-    @hl.setter
-    def hl(self, v: int):
-        self.h = (v >> 8) & 0xFF
-        self.l = v & 0xFF
-
-    @property
-    def bc(self) -> int:
-        return (self.b << 8) | self.c
-
-    @bc.setter
-    def bc(self, v: int):
-        self.b = (v >> 8) & 0xFF
-        self.c = v & 0xFF
-
-    @property
-    def de(self) -> int:
-        return (self.d << 8) | self.e
-
-    @de.setter
-    def de(self, v: int):
-        self.d = (v >> 8) & 0xFF
-        self.e = v & 0xFF
+    def build_cb_codes(self) -> None:
+        for pattern, func in self.cb_codes.items():
+            if "t" in pattern:
+                for t in range(8):
+                    self.cb_table[int(pattern.replace("ttt", format(t, "03b")), 2)] = (
+                        func
+                    )
+            elif "x" in pattern and "y" in pattern:
+                for x in range(8):
+                    for y in range(8):
+                        self.cb_table[
+                            int(
+                                pattern.replace("xxx", format(x, "03b")).replace(
+                                    "yyy", format(y, "03b")
+                                ),
+                                2,
+                            )
+                        ] = func
+            else:
+                self.cb_table[int(pattern, 2)] = func
 
     def flag_z(self) -> int:
         return (self.f >> 7) & 1
@@ -311,10 +218,10 @@ class CPU:
         if c is not None:
             flags.append(0x10 if c & 1 else 0x00)
 
-        self.f = sum(flags)
+        self.f = sum(flags) & 0xF0
 
     def advance_pc(self, n: int = 1) -> None:
-        self.pc += n
+        self.pc = (self.pc + n) & 0xFFFF
 
     def get_advance_pc_u8(self) -> int:
         self.advance_pc(1)
@@ -345,14 +252,12 @@ class CPU:
         return cycles
 
     def execute(self, opcode: int, prefix: bool = False) -> int:
-        opcode_str: str = format(opcode, "08b")
-
         if prefix:
-            if opcode_str in self.prefix_op_codes:
-                return self.prefix_op_codes[opcode_str](opcode)
-        elif opcode_str in self.op_codes:
-            return self.op_codes[opcode_str](opcode)
+            return self.cb_table[opcode](opcode)
 
+        return self.op_table[opcode](opcode)
+
+    def _op_unimplemented(self, opcode: int) -> int:
         print(f"Unimplemented opcode 0x{opcode:02X}")
         exit()
 
@@ -361,10 +266,23 @@ class CPU:
 
     def _op_ld_r16_imm16(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 4) & 0b11
-        r16: str = ADDRESSES["r16"][dest_reg]
         imm16: int = self.get_advance_pc_u16()
 
-        setattr(self, r16, imm16)
+        match dest_reg:
+            case 0:
+                self.b = (imm16 >> 8) & 0xFF
+                self.c = imm16 & 0xFF
+            case 1:
+                self.d = (imm16 >> 8) & 0xFF
+                self.e = imm16 & 0xFF
+            case 2:
+                self.h = (imm16 >> 8) & 0xFF
+                self.l = imm16 & 0xFF
+            case 3:
+                self.sp = imm16 & 0xFFFF
+            case _:
+                print(f"Invalid r16 register code: {dest_reg}")
+                exit()
 
         return 12
 
@@ -374,15 +292,19 @@ class CPU:
 
         match r16mem:
             case "bc":
-                addr: int = self.bc
+                addr: int = (self.b << 8) | self.c
             case "de":
-                addr: int = self.de
+                addr: int = (self.d << 8) | self.e
             case "hl+":
-                addr: int = self.hl
-                self.hl += 1
+                addr = (self.h << 8) | self.l
+                hl: int = (addr + 1) & 0xFFFF
+                self.h = (hl >> 8) & 0xFF
+                self.l = hl & 0xFF
             case "hl-":
-                addr: int = self.hl
-                self.hl -= 1
+                addr = (self.h << 8) | self.l
+                hl = (addr - 1) & 0xFFFF
+                self.h = (hl >> 8) & 0xFF
+                self.l = hl & 0xFF
             case _:
                 print(f"Invalid r16mem register code: {src_reg}")
                 exit()
@@ -397,21 +319,25 @@ class CPU:
 
         match r16mem:
             case "bc":
-                addr: int = self.bc
+                addr: int = (self.b << 8) | self.c
             case "de":
-                addr: int = self.de
+                addr: int = (self.d << 8) | self.e
             case "hl+":
-                addr: int = self.hl
-                self.hl += 1
+                addr = (self.h << 8) | self.l
+                hl: int = (addr + 1) & 0xFFFF
+                self.h = (hl >> 8) & 0xFF
+                self.l = hl & 0xFF
             case "hl-":
-                addr: int = self.hl
-                self.hl -= 1
+                addr = (self.h << 8) | self.l
+                hl = (addr - 1) & 0xFFFF
+                self.h = (hl >> 8) & 0xFF
+                self.l = hl & 0xFF
             case _:
                 print(f"Invalid r16mem register code: {src_reg}")
                 exit()
 
         value: int = self.mmu.read_u8(addr)
-        self.a = value
+        self.a = value & 0xFF
 
         return 8
 
@@ -420,10 +346,28 @@ class CPU:
 
     def _op_inc_r16(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 4) & 0b11
-        r16: str = ADDRESSES["r16"][dest_reg]
 
-        value = (getattr(self, r16) + 1) & 0xFFFF
-        setattr(self, r16, value)
+        match dest_reg:
+            case 0:
+                value: int = ((self.b << 8) | self.c) + 1
+                value &= 0xFFFF
+                self.b = (value >> 8) & 0xFF
+                self.c = value & 0xFF
+            case 1:
+                value = ((self.d << 8) | self.e) + 1
+                value &= 0xFFFF
+                self.d = (value >> 8) & 0xFF
+                self.e = value & 0xFF
+            case 2:
+                value = ((self.h << 8) | self.l) + 1
+                value &= 0xFFFF
+                self.h = (value >> 8) & 0xFF
+                self.l = value & 0xFF
+            case 3:
+                self.sp = (self.sp + 1) & 0xFFFF
+            case _:
+                print(f"Invalid r16 register code: {dest_reg}")
+                exit()
 
         return 8
 
@@ -438,14 +382,41 @@ class CPU:
         r8: str = ADDRESSES["r8"][dest_reg]
 
         if r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             original: int = self.mmu.read_u8(addr)
             value: int = original + 1
             self.mmu.write_u8(addr, value & 0xFF)
+        elif r8 == "a":
+            original = self.a
+            value = original + 1
+            self.a = value & 0xFF
+        elif r8 == "b":
+            original = self.b
+            value = original + 1
+            self.b = value & 0xFF
+        elif r8 == "c":
+            original = self.c
+            value = original + 1
+            self.c = value & 0xFF
+        elif r8 == "d":
+            original = self.d
+            value = original + 1
+            self.d = value & 0xFF
+        elif r8 == "e":
+            original = self.e
+            value = original + 1
+            self.e = value & 0xFF
+        elif r8 == "h":
+            original = self.h
+            value = original + 1
+            self.h = value & 0xFF
+        elif r8 == "l":
+            original = self.l
+            value = original + 1
+            self.l = value & 0xFF
         else:
-            original: int = getattr(self, r8)
-            value: int = original + 1
-            setattr(self, r8, value)
+            print(f"Invalid r8 register code: {r8}")
+            exit()
 
         self.set_flags(
             z=(value & 0xFF) == 0,
@@ -460,14 +431,41 @@ class CPU:
         r8: str = ADDRESSES["r8"][dest_reg]
 
         if r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             original: int = self.mmu.read_u8(addr)
             value: int = original - 1
             self.mmu.write_u8(addr, value & 0xFF)
+        elif r8 == "a":
+            original = self.a
+            value = original - 1
+            self.a = value & 0xFF
+        elif r8 == "b":
+            original = self.b
+            value = original - 1
+            self.b = value & 0xFF
+        elif r8 == "c":
+            original = self.c
+            value = original - 1
+            self.c = value & 0xFF
+        elif r8 == "d":
+            original = self.d
+            value = original - 1
+            self.d = value & 0xFF
+        elif r8 == "e":
+            original = self.e
+            value = original - 1
+            self.e = value & 0xFF
+        elif r8 == "h":
+            original = self.h
+            value = original - 1
+            self.h = value & 0xFF
+        elif r8 == "l":
+            original = self.l
+            value = original - 1
+            self.l = value & 0xFF
         else:
-            original: int = getattr(self, r8)
-            value: int = original - 1
-            setattr(self, r8, value)
+            print(f"Invalid r8 register code: {r8}")
+            exit()
 
         self.set_flags(
             z=(value & 0xFF) == 0,
@@ -479,10 +477,25 @@ class CPU:
 
     def _op_ld_r8_imm8(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 3) & 0b111
-        r8: str = ADDRESSES["r8"][dest_reg]
         imm8: int = self.get_advance_pc_u8()
 
-        setattr(self, r8, imm8)
+        if dest_reg == 0:
+            self.b = imm8 & 0xFF
+        elif dest_reg == 1:
+            self.c = imm8 & 0xFF
+        elif dest_reg == 2:
+            self.d = imm8 & 0xFF
+        elif dest_reg == 3:
+            self.e = imm8 & 0xFF
+        elif dest_reg == 4:
+            self.h = imm8 & 0xFF
+        elif dest_reg == 5:
+            self.l = imm8 & 0xFF
+        elif dest_reg == 7:
+            self.a = imm8 & 0xFF
+        else:
+            print(f"Invalid r8 register code: {dest_reg}")
+            exit()
 
         return 8
 
@@ -524,7 +537,7 @@ class CPU:
         imm8: int = self.to_signed_u8(self.get_advance_pc_u8())
         jump: int = (self.pc + imm8) & 0xFFFF
 
-        self.pc = jump + 1
+        self.pc = (jump + 1) & 0xFFFF
         self.pc_jumped = True
 
         return 12
@@ -555,7 +568,7 @@ class CPU:
                 exit()
 
         if cc:
-            self.pc = jump + 1
+            self.pc = (jump + 1) & 0xFFFF
             self.pc_jumped = True
 
         return 12 if cc else 8
@@ -572,16 +585,46 @@ class CPU:
         value: int = 0
 
         if src_r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             value: int = self.mmu.read_u8(addr)
+        elif src_r8 == "a":
+            value = self.a
+        elif src_r8 == "b":
+            value = self.b
+        elif src_r8 == "c":
+            value = self.c
+        elif src_r8 == "d":
+            value = self.d
+        elif src_r8 == "e":
+            value = self.e
+        elif src_r8 == "h":
+            value = self.h
+        elif src_r8 == "l":
+            value = self.l
         else:
-            value: int = getattr(self, src_r8)
+            print(f"Invalid source r8 register code: {src_r8}")
+            exit()
 
         if dest_r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             self.mmu.write_u8(addr, value)
+        elif dest_r8 == "a":
+            self.a = value & 0xFF
+        elif dest_r8 == "b":
+            self.b = value & 0xFF
+        elif dest_r8 == "c":
+            self.c = value & 0xFF
+        elif dest_r8 == "d":
+            self.d = value & 0xFF
+        elif dest_r8 == "e":
+            self.e = value & 0xFF
+        elif dest_r8 == "h":
+            self.h = value & 0xFF
+        elif dest_r8 == "l":
+            self.l = value & 0xFF
         else:
-            setattr(self, dest_r8, value)
+            print(f"Invalid destination r8 register code: {dest_r8}")
+            exit()
 
         return 4
 
@@ -600,19 +643,34 @@ class CPU:
 
         value: int = 0
         if r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             value: int = self.mmu.read_u8(addr)
+        elif r8 == "a":
+            value = self.a
+        elif r8 == "b":
+            value = self.b
+        elif r8 == "c":
+            value = self.c
+        elif r8 == "d":
+            value = self.d
+        elif r8 == "e":
+            value = self.e
+        elif r8 == "h":
+            value = self.h
+        elif r8 == "l":
+            value = self.l
         else:
-            value: int = getattr(self, r8)
+            print(f"Invalid r8 register code: {r8}")
+            exit()
 
         result: int = (self.a - value) & 0xFF
-        self.a = result
+        self.a = result & 0xFF
 
         self.set_flags(
             z=result == 0,
             n=1,
-            h=(self.a & 0x0F) < (value & 0x0F),
-            c=self.a < value,
+            h=(result & 0x0F) < (value & 0x0F),
+            c=result < value,
         )
 
         return 4
@@ -630,12 +688,27 @@ class CPU:
         value: int = 0
 
         if r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             value: int = self.mmu.read_u8(addr)
+        elif r8 == "a":
+            value = self.a
+        elif r8 == "b":
+            value = self.b
+        elif r8 == "c":
+            value = self.c
+        elif r8 == "d":
+            value = self.d
+        elif r8 == "e":
+            value = self.e
+        elif r8 == "h":
+            value = self.h
+        elif r8 == "l":
+            value = self.l
         else:
-            value: int = getattr(self, r8)
+            print(f"Invalid r8 register code: {r8}")
+            exit()
 
-        self.a ^= value
+        self.a = (self.a ^ value) & 0xFF
 
         self.set_flags(
             z=self.a == 0,
@@ -691,12 +764,12 @@ class CPU:
 
     def _op_ret(self, opcode: int) -> int:
         low: int = self.mmu.read_u8(self.sp)
-        self.sp += 1
+        self.sp = (self.sp + 1) & 0xFFFF
         high: int = self.mmu.read_u8(self.sp)
-        self.sp += 1
+        self.sp = (self.sp + 1) & 0xFFFF
 
         addr: int = (high << 8) | low
-        self.pc = addr
+        self.pc = addr & 0xFFFF
         self.pc_jumped = True
 
         return 16
@@ -726,7 +799,7 @@ class CPU:
         self.sp = (self.sp - 1) & 0xFFFF
         self.mmu.write_u8(self.sp, self.pc & 0xFF)
 
-        self.pc = imm16
+        self.pc = imm16 & 0xFFFF
         self.pc_jumped = True
 
         return 24
@@ -744,7 +817,23 @@ class CPU:
         self.sp = (self.sp + 1) & 0xFFFF
 
         value: int = (high << 8) | low
-        setattr(self, r16stk, value)
+
+        match r16stk:
+            case "bc":
+                self.b = (value >> 8) & 0xFF
+                self.c = value & 0xFF
+            case "de":
+                self.d = (value >> 8) & 0xFF
+                self.e = value & 0xFF
+            case "hl":
+                self.h = (value >> 8) & 0xFF
+                self.l = value & 0xFF
+            case "af":
+                self.a = (value >> 8) & 0xFF
+                self.f = value & 0xF0
+            case _:
+                print(f"Invalid r16stk register code: {r16stk}")
+                exit()
 
         return 12
 
@@ -752,7 +841,18 @@ class CPU:
         src_reg: int = (opcode >> 4) & 0b11
         r16stk: str = ADDRESSES["r16stk"][src_reg]
 
-        value: int = getattr(self, r16stk)
+        match r16stk:
+            case "bc":
+                value: int = (self.b << 8) | self.c
+            case "de":
+                value = (self.d << 8) | self.e
+            case "hl":
+                value = (self.h << 8) | self.l
+            case "af":
+                value = (self.a << 8) | self.f
+            case _:
+                print(f"Invalid r16stk register code: {r16stk}")
+                exit()
 
         self.sp = (self.sp - 1) & 0xFFFF
         self.mmu.write_u8(self.sp, (value >> 8) & 0xFF)
@@ -795,7 +895,7 @@ class CPU:
         addr: int = 0xFF00 + imm8
 
         value: int = self.mmu.read_u8(addr)
-        self.a = value
+        self.a = value & 0xFF
 
         return 12
 
@@ -830,19 +930,49 @@ class CPU:
         value: int = 0
 
         if r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             value: int = self.mmu.read_u8(addr)
+        elif r8 == "a":
+            value = self.a
+        elif r8 == "b":
+            value = self.b
+        elif r8 == "c":
+            value = self.c
+        elif r8 == "d":
+            value = self.d
+        elif r8 == "e":
+            value = self.e
+        elif r8 == "h":
+            value = self.h
+        elif r8 == "l":
+            value = self.l
         else:
-            value: int = getattr(self, r8)
+            print(f"Invalid r8 register code: {r8}")
+            exit()
 
         carry: int = (value >> 7) & 1
         value = ((value << 1) | self.flag_c()) & 0xFF
 
         if r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             self.mmu.write_u8(addr, value)
+        elif r8 == "a":
+            self.a = value & 0xFF
+        elif r8 == "b":
+            self.b = value & 0xFF
+        elif r8 == "c":
+            self.c = value & 0xFF
+        elif r8 == "d":
+            self.d = value & 0xFF
+        elif r8 == "e":
+            self.e = value & 0xFF
+        elif r8 == "h":
+            self.h = value & 0xFF
+        elif r8 == "l":
+            self.l = value & 0xFF
         else:
-            setattr(self, r8, value)
+            print(f"Invalid destination r8 register code: {r8}")
+            exit()
 
         self.set_flags(
             z=value == 0,
@@ -876,10 +1006,25 @@ class CPU:
         value: int = 0
 
         if r8 == "(hl)":
-            addr: int = self.hl
+            addr: int = (self.h << 8) | self.l
             value = self.mmu.read_u8(addr)
+        elif r8 == "a":
+            value = self.a
+        elif r8 == "b":
+            value = self.b
+        elif r8 == "c":
+            value = self.c
+        elif r8 == "d":
+            value = self.d
+        elif r8 == "e":
+            value = self.e
+        elif r8 == "h":
+            value = self.h
+        elif r8 == "l":
+            value = self.l
         else:
-            value = getattr(self, r8)
+            print(f"Invalid r8 register code: {r8}")
+            exit()
 
         self.set_flags(
             z=(value & (1 << bit)) == 0,
