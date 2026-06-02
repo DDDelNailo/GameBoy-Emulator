@@ -12,6 +12,8 @@ REG_F = 6
 REG_A = 7
 
 debug_temp = False
+
+
 class CPU:
     def __init__(self, mmu: MMU) -> None:
         self.mmu: MMU = mmu
@@ -24,14 +26,14 @@ class CPU:
         self.op_table: list[Callable[[int], int]] = [self._op_unimplemented] * 256
         self.cb_table: list[Callable[[int], int]] = [self._op_unimplemented] * 256
         self.op_codes: dict[str, Callable[[int], int]] = {
-            # "00000000": self._op_nop,
+            "00000000": self._op_nop,
             "00rr0001": self._op_ld_r16_imm16,
             "00rr0010": self._op_ld_p_r16mem_a,
             "00rr1010": self._op_ld_a_p_r16mem,
             # "........": self._op_ld_p_imm16_sp,
             "00rr0011": self._op_inc_r16,
-            # "00rr1011": self._op_dec_r16,
-            # "........": self._op_add_hl_r16,
+            "00rr1011": self._op_dec_r16,
+            "00rr1001": self._op_add_hl_r16,
             "00ttt100": self._op_inc_r8,
             "00ttt101": self._op_dec_r8,
             "00ttt110": self._op_ld_r8_imm8,
@@ -40,27 +42,27 @@ class CPU:
             "00010111": self._op_rla,
             # "........": self._op_rra,
             # "........": self._op_daa,
-            # "........": self._op_cpl,
-            # "........": self._op_scf,
+            "00101111": self._op_cpl,
+            "00110111": self._op_scf,
             # "........": self._op_ccf,
             "00011000": self._op_jr_imm8,
             "001rr000": self._op_jr_cond_imm8,
             # "........": self._op_stop,
             "01xxxyyy": self._op_ld_r8_r8,
             # "........": self._op_halt,
-            # "........": self._op_add_a_r8,
-            "10000ttt": self._op_adc_a_r8,
+            "10000ttt": self._op_add_a_r8,
+            # "........": self._op_adc_a_r8,
             "10010ttt": self._op_sub_a_r8,
             # "........": self._op_sbc_a_r8,
-            # "........": self._op_and_a_r8,
+            "10100ttt": self._op_and_a_r8,
             "10101ttt": self._op_xor_a_r8,
-            # "........": self._op_or_a_r8,
+            "10110ttt": self._op_or_a_r8,
             "10111ttt": self._op_cp_a_r8,
             # "........": self._op_add_a_imm8,
             # "........": self._op_adc_a_imm8,
             # "........": self._op_sub_a_imm8,
             # "........": self._op_sbc_a_imm8,
-            # "........": self._op_and_a_imm8,
+            "11100110": self._op_and_a_imm8,
             # "........": self._op_xor_a_imm8,
             # "........": self._op_or_a_imm8,
             "11111110": self._op_cp_a_imm8,
@@ -68,11 +70,11 @@ class CPU:
             "11001001": self._op_ret,
             # "........": self._op_reti,
             # "........": self._op_jp_cond_imm16,
-            # "........": self._op_jp_imm16,
+            "11000011": self._op_jp_imm16,
             # "........": self._op_jp_hl,
             # "........": self._op_call_cond_imm16,
             "11001101": self._op_call_imm16,
-            # "........": self._op_rst_tgt3,
+            "11ttt111": self._op_rst_tgt3,
             "11rr0001": self._op_pop_r16stk,
             "11rr0101": self._op_push_r16stk,
             "11001011": self._op_PREFIX,
@@ -81,12 +83,12 @@ class CPU:
             "11101010": self._op_ld_p_imm16_a,
             # "........": self._op_ldh_a_p_c,
             "11110000": self._op_ldh_a_p_imm8,
-            # "........": self._op_ld_a_imm16,
+            "11111010": self._op_ld_a_imm16,
             # "........": self._op_add_sp_imm8,
             # "........": self._op_ld_hl_sp_plus_imm8,
             # "........": self._op_ld_sp_hl,
-            # "........": self._op_di,
-            # "........": self._op_ei,
+            "11110011": self._op_di,
+            "11111011": self._op_ei,
         }
         self.cb_codes: dict[str, Callable[[int], int]] = {
             # "........": self._op_rlc_r8,
@@ -95,10 +97,10 @@ class CPU:
             # "........": self._op_rr_r8,
             # "........": self._op_sla_r8,
             # "........": self._op_sra_r8,
-            # "........": self._op_swap_r8,
+            "0b00110ttt": self._op_swap_r8,
             # "........": self._op_srl_r8,
             "01xxxyyy": self._op_bit_b_r8,
-            # "........": self.res_b3_r8,
+            "10xxxyyy": self.res_b3_r8,
             # "........": self.set_b3_r8,
         }
 
@@ -165,29 +167,44 @@ class CPU:
 
         opcode: int = self.mmu.read_u8(self.pc)
         cycles: int = self.execute(opcode)
-        
-        if self.pc == 0x00fa:
-            global debug_temp
-            debug_temp = True
-            print(f"PC: 0x{self.pc:04X}, Opcode: 0x{opcode:02X}, A: 0x{self.u8_regs[REG_A]:02X}, F: 0x{self.f:02X}, B: 0x{self.u8_regs[REG_B]:02X}, C: 0x{self.u8_regs[REG_C]:02X}, D: 0x{self.u8_regs[REG_D]:02X}, E: 0x{self.u8_regs[REG_E]:02X}, H: 0x{self.u8_regs[REG_H]:02X}, L: 0x{self.u8_regs[REG_L]:02X}, SP: 0x{self.sp:04X}")
+
+        # if self.pc > 0x00FF:
+        #     global debug_temp
+        #     debug_temp = True
+        #     # print(f"B: {self.u8_regs[REG_B]}, F: {format(self.f, '08b')}, Z: {(self.f >> 7) & 1}")
+
+        if debug_temp:
+            print(f"PC: 0x{self.pc:04X}, Opcode: 0x{opcode:02X}")
 
         if not self.pc_jumped:
             self.pc = (self.pc + 1) & 0xFFFF
 
+        if cycles == 0:
+            print(
+                f"op=0x{opcode:02X}, op=0b{format(opcode, '08b')}, pc=0x{self.pc:04X}"
+            )
+            print("CPU step returned 0 cycles, which is invalid")
+            exit()
+
         return cycles
 
     def execute(self, opcode: int, prefix: bool = False) -> int:
-        if prefix:
-            return self.cb_table[opcode](opcode)
+        try:
+            if prefix:
+                return self.cb_table[opcode](opcode)
 
-        return self.op_table[opcode](opcode)
+            return self.op_table[opcode](opcode)
+        except NotImplementedError as e:
+            print(
+                f"Error executing {"prefixed " if prefix else ""}opcode 0x{opcode:02X}, 0b{format(opcode, '08b')} at PC=0x{self.pc:04X}: {e}"
+            )
+            exit()
 
     def _op_unimplemented(self, opcode: int) -> int:
-        print(f"Unimplemented opcode 0x{opcode:02X} at PC=0x{self.pc:04X}")
-        exit()
+        raise NotImplementedError
 
-    # def _op_nop(self, opcode: int) -> int:
-    #     return 4
+    def _op_nop(self, opcode: int) -> int:
+        return 4
 
     def _op_ld_r16_imm16(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 4) & 0b11
@@ -266,8 +283,8 @@ class CPU:
 
         return 8
 
-    # def _op_ld_p_imm16_sp(self, opcode: int) -> int:
-    #     return 0
+    def _op_ld_p_imm16_sp(self, opcode: int) -> int:
+        return 0
 
     def _op_inc_r16(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 4) & 0b11
@@ -299,11 +316,65 @@ class CPU:
 
         return 8
 
-    # def _op_dec_r16(self, opcode: int) -> int:
-    #     return 0
+    def _op_dec_r16(self, opcode: int) -> int:
+        dest_reg: int = (opcode >> 4) & 0b11
 
-    # def _op_add_hl_r16(self, opcode: int) -> int:
-    #     return 0
+        match dest_reg:
+            case 0:
+                value: int = (
+                    (int(self.u8_regs[REG_B]) << 8) | int(self.u8_regs[REG_C])
+                ) - 1
+                self.u8_regs[REG_B] = value >> 8
+                self.u8_regs[REG_C] = value & 0xFF
+            case 1:
+                value: int = (
+                    (int(self.u8_regs[REG_D]) << 8) | int(self.u8_regs[REG_E])
+                ) - 1
+                self.u8_regs[REG_D] = value >> 8
+                self.u8_regs[REG_E] = value & 0xFF
+            case 2:
+                value: int = (
+                    (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+                ) - 1
+                self.u8_regs[REG_H] = value >> 8
+                self.u8_regs[REG_L] = value & 0xFF
+            case 3:
+                self.sp = (self.sp - 1) & 0xFFFF
+            case _:
+                print(f"(dec r16) Invalid r16 register code: {dest_reg}")
+                exit()
+
+        return 8
+
+    def _op_add_hl_r16(self, opcode: int) -> int:
+        src_reg: int = (opcode >> 4) & 0b11
+        hl: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+        value: int
+
+        if src_reg == 0:
+            value = (int(self.u8_regs[REG_B]) << 8) | int(self.u8_regs[REG_C])
+        elif src_reg == 1:
+            value = (int(self.u8_regs[REG_D]) << 8) | int(self.u8_regs[REG_E])
+        elif src_reg == 2:
+            value = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+        elif src_reg == 3:
+            value = self.sp
+        else:
+            print(f"(add hl, r16) Invalid r16 register code: {src_reg}")
+            exit()
+
+        result: int = hl + value
+        self.u8_regs[REG_H] = (result >> 8) & 0xFF
+        self.u8_regs[REG_L] = result & 0xFF
+
+        self.u8_regs[REG_F] = (
+            self.u8_regs[REG_F]
+            | (0 << 6)
+            | (int(((hl & 0x0FFF) + (value & 0x0FFF)) > 0x0FFF) << 5)
+            | (int(result > 0xFFFF) << 4)
+        ) & 0xF0
+
+        return 8
 
     def _op_inc_r8(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 3) & 0b111
@@ -347,10 +418,10 @@ class CPU:
             value = original + 1
             self.u8_regs[REG_L] = value
         else:
-            print(f"Invalid r8 register code: {dest_reg}")
+            print(f"(inc r8) Invalid r8 register code: {dest_reg}")
             exit()
 
-        self.f = (
+        self.u8_regs[REG_F] = (
             (int(value == 0) << 7)
             | (0 << 6)
             | (int((original & 0x0F) == 0x0F) << 5)
@@ -399,10 +470,10 @@ class CPU:
             value = original - 1
             self.u8_regs[REG_L] = value & 0xFF
         else:
-            print(f"Invalid r8 register code: {dest_reg}")
+            print(f"(dec r8) Invalid r8 register code: {dest_reg}")
             exit()
 
-        self.f = (
+        self.u8_regs[REG_F] = (
             (int(value == 0) << 7)
             | (1 << 6)
             | (int((original & 0x0F) == 0x00) << 5)
@@ -416,7 +487,10 @@ class CPU:
         self.pc = (self.pc + 1) & 0xFFFF
         imm8: int = self.mmu.read_u8(self.pc)
 
-        if dest_reg == 0:
+        if dest_reg == 6:
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+            self.mmu.write_u8(addr, imm8)
+        elif dest_reg == 0:
             self.u8_regs[REG_B] = imm8
         elif dest_reg == 1:
             self.u8_regs[REG_C] = imm8
@@ -431,41 +505,48 @@ class CPU:
         elif dest_reg == 7:
             self.u8_regs[REG_A] = imm8
         else:
-            print(f"Invalid r8 register code: {dest_reg}")
+            print(f"(ld r8, imm8) Invalid r8 register code: {dest_reg}")
             exit()
 
         return 8
 
-    # def _op_rlca(self, opcode: int) -> int:
-    #     return 0
+    def _op_rlca(self, opcode: int) -> int:
+        return 0
 
-    # def _op_rrca(self, opcode: int) -> int:
-    #     return 0
+    def _op_rrca(self, opcode: int) -> int:
+        return 0
 
     def _op_rla(self, opcode: int) -> int:
         carry: int = (int(self.u8_regs[REG_A]) >> 7) & 1
         self.u8_regs[REG_A] = (int(self.u8_regs[REG_A]) << 1) & 0xFF | (
-            (self.f >> 4) & 1
+            (self.u8_regs[REG_F] >> 4) & 1
         )
 
-        self.f = ((0 << 7) | (0 << 6) | (0 << 5) | (carry << 4)) & 0xF0
+        self.u8_regs[REG_F] = ((0 << 7) | (0 << 6) | (0 << 5) | (carry << 4)) & 0xF0
 
         return 8
 
-    # def _op_rra(self, opcode: int) -> int:
-    #     return 0
+    def _op_rra(self, opcode: int) -> int:
+        return 0
 
-    # def _op_daa(self, opcode: int) -> int:
-    #     return 0
+    def _op_daa(self, opcode: int) -> int:
+        return 0
 
-    # def _op_cpl(self, opcode: int) -> int:
-    #     return 0
+    def _op_cpl(self, opcode: int) -> int:
+        self.u8_regs[REG_A] = self.u8_regs[REG_A] ^ 0xFF
+        self.u8_regs[REG_F] = (self.u8_regs[REG_F] | (1 << 6) | (1 << 5)) & 0xF0
 
-    # def _op_scf(self, opcode: int) -> int:
-    #     return 0
+        return 4
 
-    # def _op_ccf(self, opcode: int) -> int:
-    #     return 0
+    def _op_scf(self, opcode: int) -> int:
+        self.u8_regs[REG_F] = (
+            self.u8_regs[REG_F] | (0 << 6) | (0 << 5) | (1 << 4)
+        ) & 0xF0
+
+        return 4
+
+    def _op_ccf(self, opcode: int) -> int:
+        return 0
 
     def _op_jr_imm8(self, opcode: int) -> int:
         self.pc = (self.pc + 1) & 0xFFFF
@@ -487,17 +568,13 @@ class CPU:
         cc: bool = False
         match cond_code:
             case 0:  # nz
-                if (self.f & 0x80) == 0:
-                    cc = True
+                cc = (self.u8_regs[REG_F] & 0x80) == 0
             case 1:  # z
-                if (self.f & 0x80) != 0:
-                    cc = True
+                cc = (self.u8_regs[REG_F] & 0x80) != 0
             case 2:  # nc
-                if (self.f & 0x10) == 0:
-                    cc = True
+                cc = (self.u8_regs[REG_F] & 0x10) == 0
             case 3:  # c
-                if (self.f & 0x10) != 0:
-                    cc = True
+                cc = (self.u8_regs[REG_F] & 0x10) != 0
             case _:
                 print(f"Invalid condition code: {cond_code}")
                 exit()
@@ -508,8 +585,8 @@ class CPU:
 
         return 12 if cc else 8
 
-    # def _op_stop(self, opcode: int) -> int:
-    #     return 0
+    def _op_stop(self, opcode: int) -> int:
+        return 0
 
     def _op_ld_r8_r8(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 3) & 0b111
@@ -519,8 +596,7 @@ class CPU:
 
         value: int = 0
 
-        # source
-        if src_reg == 6:  # (hl)
+        if src_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             value: int = mmu_read_u8(addr)
         elif src_reg == 7:
@@ -538,11 +614,10 @@ class CPU:
         elif src_reg == 5:
             value = self.u8_regs[REG_L]
         else:
-            print(f"Invalid source r8 register code: {src_reg}")
+            print(f"(ld r8, r8) Invalid source r8 register code: {src_reg}")
             exit()
 
-        # destination
-        if dest_reg == 6:  # (hl)
+        if dest_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
             mmu_write_u8(addr, value)
         elif dest_reg == 7:
@@ -560,18 +635,15 @@ class CPU:
         elif dest_reg == 5:
             self.u8_regs[REG_L] = value
         else:
-            print(f"Invalid destination r8 register code: {dest_reg}")
+            print(f"(ld r8, r8) Invalid destination r8 register code: {dest_reg}")
             exit()
 
         return 4
 
-    # def _op_halt(self, opcode: int) -> int:
-    #     return 0
+    def _op_halt(self, opcode: int) -> int:
+        return 0
 
-    # def _op_add_a_r8(self, opcode: int) -> int:
-    #     return 0
-
-    def _op_adc_a_r8(self, opcode: int) -> int:
+    def _op_add_a_r8(self, opcode: int) -> int:
         src_reg: int = opcode & 0b111
         mmu_read_u8 = self.mmu.read_u8
 
@@ -594,21 +666,24 @@ class CPU:
         elif src_reg == 5:
             value = self.u8_regs[REG_L]
         else:
-            print(f"Invalid r8 register code: {src_reg}")
+            print(f"(add a, r8) Invalid r8 register code: {src_reg}")
             exit()
 
-        result: int = int(self.u8_regs[REG_A]) + value
+        a: int = int(self.u8_regs[REG_A])
+        result: int = a + value
         self.u8_regs[REG_A] = result & 0xFF
 
-        self.f = (
-            (int(result == 0) << 7)
-            | (1 << 6)
-            | (int((result & 0x0F) < (value & 0x0F)) << 5)
-            | (int(result < value) << 4)
+        self.u8_regs[REG_F] = (
+            (int(result & 0xFF == 0) << 7)
+            | (0 << 6)
+            | (int((a & 0x0F) + (value & 0x0F)) > 0xF << 5)
+            | (result > 0xFF << 4)
         ) & 0xF0
 
         return 4
-        
+
+    def _op_adc_a_r8(self, opcode: int) -> int:
+        return 0
 
     def _op_sub_a_r8(self, opcode: int) -> int:
         src_reg: int = opcode & 0b111
@@ -633,13 +708,13 @@ class CPU:
         elif src_reg == 5:
             value = self.u8_regs[REG_L]
         else:
-            print(f"Invalid r8 register code: {src_reg}")
+            print(f"(sub a, r8) Invalid r8 register code: {src_reg}")
             exit()
 
         result: int = self.u8_regs[REG_A] - value
         self.u8_regs[REG_A] = result
 
-        self.f = (
+        self.u8_regs[REG_F] = (
             (int(result == 0) << 7)
             | (1 << 6)
             | (int((result & 0x0F) < (value & 0x0F)) << 5)
@@ -648,11 +723,43 @@ class CPU:
 
         return 4
 
-    # def _op_sbc_a_r8(self, opcode: int) -> int:
-    #     return 0
+    def _op_sbc_a_r8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_and_a_r8(self, opcode: int) -> int:
-    #     return 0
+    def _op_and_a_r8(self, opcode: int) -> int:
+        src_reg: int = opcode & 0b111
+        mmu_read_u8 = self.mmu.read_u8
+
+        value: int = 0
+
+        if src_reg == 6:
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+            value: int = mmu_read_u8(addr)
+        elif src_reg == 7:
+            value = self.u8_regs[REG_A]
+        elif src_reg == 0:
+            value = self.u8_regs[REG_B]
+        elif src_reg == 1:
+            value = self.u8_regs[REG_C]
+        elif src_reg == 2:
+            value = self.u8_regs[REG_D]
+        elif src_reg == 3:
+            value = self.u8_regs[REG_E]
+        elif src_reg == 4:
+            value = self.u8_regs[REG_H]
+        elif src_reg == 5:
+            value = self.u8_regs[REG_L]
+        else:
+            print(f"(and a, r8) Invalid r8 register code: {src_reg}")
+            exit()
+
+        self.u8_regs[REG_A] = self.u8_regs[REG_A] & value
+
+        self.u8_regs[REG_F] = (
+            (int(self.u8_regs[REG_A] == 0) << 7) | (0 << 6) | (1 << 5) | (0 << 4)
+        ) & 0xF0
+
+        return 4
 
     def _op_xor_a_r8(self, opcode: int) -> int:
         src_reg: int = opcode & 0b111
@@ -678,23 +785,20 @@ class CPU:
         elif src_reg == 5:
             value = self.u8_regs[REG_L]
         else:
-            print(f"Invalid r8 register code: {src_reg}")
+            print(f"(xor a, r8) Invalid r8 register code: {src_reg}")
             exit()
 
         self.u8_regs[REG_A] = self.u8_regs[REG_A] ^ value
 
-        self.f = (
+        self.u8_regs[REG_F] = (
             (int(self.u8_regs[REG_A] == 0) << 7) | (0 << 6) | (0 << 5) | (0 << 4)
         ) & 0xF0
         return 4
 
-    # def _op_or_a_r8(self, opcode: int) -> int:
-    #     return 0
-
-    def _op_cp_a_r8(self, opcode: int) -> int:
+    def _op_or_a_r8(self, opcode: int) -> int:
         src_reg: int = opcode & 0b111
         mmu_read_u8 = self.mmu.read_u8
-        
+
         value: int = 0
         if src_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
@@ -714,40 +818,80 @@ class CPU:
         elif src_reg == 5:
             value = self.u8_regs[REG_L]
         else:
-            print(f"Invalid r8 register code: {src_reg}")
+            print(f"(or a, r8) Invalid r8 register code: {src_reg}")
+            exit()
+
+        self.u8_regs[REG_A] = self.u8_regs[REG_A] | value
+        self.u8_regs[REG_F] = (
+            (int(self.u8_regs[REG_A] == 0) << 7) | (0 << 6) | (0 << 5) | (0 << 4)
+        ) & 0xF0
+
+        return 4
+
+    def _op_cp_a_r8(self, opcode: int) -> int:
+        src_reg: int = opcode & 0b111
+        mmu_read_u8 = self.mmu.read_u8
+
+        value: int = 0
+        if src_reg == 6:
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+            value: int = mmu_read_u8(addr)
+        elif src_reg == 7:
+            value = self.u8_regs[REG_A]
+        elif src_reg == 0:
+            value = self.u8_regs[REG_B]
+        elif src_reg == 1:
+            value = self.u8_regs[REG_C]
+        elif src_reg == 2:
+            value = self.u8_regs[REG_D]
+        elif src_reg == 3:
+            value = self.u8_regs[REG_E]
+        elif src_reg == 4:
+            value = self.u8_regs[REG_H]
+        elif src_reg == 5:
+            value = self.u8_regs[REG_L]
+        else:
+            print(f"(cp a, r8) Invalid r8 register code: {src_reg}")
             exit()
 
         result: int = int(self.u8_regs[REG_A]) - value
-        
-        self.f = (
+
+        self.u8_regs[REG_F] = (
             (int(result == 0) << 7)
             | (1 << 6)
             | (int((self.u8_regs[REG_A] & 0x0F) < (value & 0x0F)) << 5)
             | (int(self.u8_regs[REG_A] < value) << 4)
         ) & 0xF0
-        
+
         return 8 if src_reg == 6 else 4
 
-    # def _op_add_a_imm8(self, opcode: int) -> int:
-    #     return 0
+    def _op_add_a_imm8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_adc_a_imm8(self, opcode: int) -> int:
-    #     return 0
+    def _op_adc_a_imm8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_sub_a_imm8(self, opcode: int) -> int:
-    #     return 0
+    def _op_sub_a_imm8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_sbc_a_imm8(self, opcode: int) -> int:
-    #     return 0
+    def _op_sbc_a_imm8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_and_a_imm8(self, opcode: int) -> int:
-    #     return 0
+    def _op_and_a_imm8(self, opcode: int) -> int:
+        self.pc = (self.pc + 1) & 0xFFFF
+        imm8: int = self.mmu.read_u8(self.pc)
+        self.u8_regs[REG_A] = self.u8_regs[REG_A] & imm8
+        self.u8_regs[REG_F] = (
+            (int(self.u8_regs[REG_A] == 0) << 7) | (0 << 6) | (1 << 5) | (0 << 4)
+        ) & 0xF0
 
-    # def _op_xor_a_imm8(self, opcode: int) -> int:
-    #     return 0
+        return 8
 
-    # def _op_or_a_imm8(self, opcode: int) -> int:
-    #     return 0
+    def _op_xor_a_imm8(self, opcode: int) -> int:
+        return 0
+
+    def _op_or_a_imm8(self, opcode: int) -> int:
+        return 0
 
     def _op_cp_a_imm8(self, opcode: int) -> int:
         self.pc = (self.pc + 1) & 0xFFFF
@@ -755,7 +899,7 @@ class CPU:
 
         result: int = int(self.u8_regs[REG_A]) - imm8
 
-        self.f = (
+        self.u8_regs[REG_F] = (
             (int(result == 0) << 7)
             | (1 << 6)
             | (int((self.u8_regs[REG_A] & 0x0F) < (imm8 & 0x0F)) << 5)
@@ -764,8 +908,8 @@ class CPU:
 
         return 8
 
-    # def _op_ret_cond(self, opcode: int) -> int:
-    #     return 0
+    def _op_ret_cond(self, opcode: int) -> int:
+        return 0
 
     def _op_ret(self, opcode: int) -> int:
         low: int = self.mmu.read_u8(self.sp)
@@ -779,30 +923,37 @@ class CPU:
 
         return 16
 
-    # def _op_reti(self, opcode: int) -> int:
-    #     return 0
+    def _op_reti(self, opcode: int) -> int:
+        return 0
 
-    # def _op_jp_cond_imm16(self, opcode: int) -> int:
-    #     return 0
+    def _op_jp_cond_imm16(self, opcode: int) -> int:
+        return 0
 
-    # def _op_jp_imm16(self, opcode: int) -> int:
-    #     return 0
-
-    # def _op_jp_hl(self, opcode: int) -> int:
-    #     return 0
-
-    # def _op_call_cond_imm16(self, opcode: int) -> int:
-    #     return 0
-
-    def _op_call_imm16(self, opcode: int) -> int:
-        # inline get_advance_pc_u16
+    def _op_jp_imm16(self, opcode: int) -> int:
         self.pc = (self.pc + 1) & 0xFFFF
         lo: int = self.mmu.read_u8(self.pc)
         self.pc = (self.pc + 1) & 0xFFFF
         hi: int = self.mmu.read_u8(self.pc)
         imm16: int = lo | (hi << 8)
 
-        # advance past opcode (original code called self.regs[REG_A]dvance_pc())
+        self.pc = imm16 & 0xFFFF
+        self.pc_jumped = True
+
+        return 16
+
+    def _op_jp_hl(self, opcode: int) -> int:
+        return 0
+
+    def _op_call_cond_imm16(self, opcode: int) -> int:
+        return 0
+
+    def _op_call_imm16(self, opcode: int) -> int:
+        self.pc = (self.pc + 1) & 0xFFFF
+        lo: int = self.mmu.read_u8(self.pc)
+        self.pc = (self.pc + 1) & 0xFFFF
+        hi: int = self.mmu.read_u8(self.pc)
+        imm16: int = lo | (hi << 8)
+
         self.pc = (self.pc + 1) & 0xFFFF
 
         self.sp = (self.sp - 1) & 0xFFFF
@@ -815,8 +966,22 @@ class CPU:
 
         return 24
 
-    # def _op_rst_tgt3(self, opcode: int) -> int:
-    #     return 0
+    def _op_rst_tgt3(self, opcode: int) -> int:
+        self.sp = (self.sp - 1) & 0xFFFF
+        self.mmu.write_u8(self.sp, int(self.pc >> 8))
+        self.sp = (self.sp - 1) & 0xFFFF
+        self.mmu.write_u8(self.sp, int(self.pc & 0xFF))
+
+        print(f"PC before RST: {hex(self.pc)}")
+
+        target: int = (opcode >> 3 & 0b111) * 8
+        self.pc = target & 0xFFFF
+        self.pc_jumped = True
+
+        print(f"RST to {hex(target)}")
+        print(f"PC after RST: {hex(self.pc)}")
+
+        return 16
 
     def _op_pop_r16stk(self, opcode: int) -> int:
         dest_reg: int = (opcode >> 4) & 0b11
@@ -838,9 +1003,9 @@ class CPU:
             self.u8_regs[REG_L] = value & 0xFF
         elif dest_reg == 3:  # af
             self.u8_regs[REG_A] = (value >> 8) & 0xFF
-            self.f = value & 0xF0
+            self.u8_regs[REG_F] = value & 0xF0
         else:
-            print(f"Invalid r16stk register code: {dest_reg}")
+            print(f"(pop r16stk) Invalid r16stk register code: {dest_reg}")
             exit()
 
         return 12
@@ -854,9 +1019,9 @@ class CPU:
         elif src_reg == 2:  # hl
             value = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
         elif src_reg == 3:  # af
-            value = (int(self.u8_regs[REG_A]) << 8) | self.f
+            value = (int(self.u8_regs[REG_A]) << 8) | int(self.u8_regs[REG_F])
         else:
-            print(f"Invalid r16stk register code: {src_reg}")
+            print(f"(push r16stk) Invalid r16stk register code: {src_reg}")
             exit()
 
         self.sp = (self.sp - 1) & 0xFFFF
@@ -898,8 +1063,8 @@ class CPU:
 
         return 16
 
-    # def _op_ldh_a_p_c(self, opcode: int) -> int:
-    #     return 0
+    def _op_ldh_a_p_c(self, opcode: int) -> int:
+        return 0
 
     def _op_ldh_a_p_imm8(self, opcode: int) -> int:
         self.pc = (self.pc + 1) & 0xFFFF
@@ -911,29 +1076,39 @@ class CPU:
 
         return 12
 
-    # def _op_ld_a_imm16(self, opcode: int) -> int:
-    #     return 0
+    def _op_ld_a_imm16(self, opcode: int) -> int:
+        self.pc = (self.pc + 1) & 0xFFFF
+        lo: int = self.mmu.read_u8(self.pc)
+        self.pc = (self.pc + 1) & 0xFFFF
+        hi: int = self.mmu.read_u8(self.pc)
+        imm16: int = lo | (hi << 8)
 
-    # def _op_add_sp_imm8(self, opcode: int) -> int:
-    #     return 0
+        self.u8_regs[REG_A] = self.mmu.read_u8(imm16)
 
-    # def _op_ld_hl_sp_plus_imm8(self, opcode: int) -> int:
-    #     return 0
+        return 16
 
-    # def _op_ld_sp_hl(self, opcode: int) -> int:
-    #     return 0
+    def _op_add_sp_imm8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_di(self, opcode: int) -> int:
-    #     return 0
+    def _op_ld_hl_sp_plus_imm8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_ei(self, opcode: int) -> int:
-    #     return 0
+    def _op_ld_sp_hl(self, opcode: int) -> int:
+        return 0
 
-    # def _op_rlc_r8(self, opcode: int) -> int:
-    #     return 0
+    def _op_di(self, opcode: int) -> int:
+        self.ime = False
+        return 4
 
-    # def _op_rrc_r8(self, opcode: int) -> int:
-    #     return 0
+    def _op_ei(self, opcode: int) -> int:
+        self.ime = True
+        return 4
+
+    def _op_rlc_r8(self, opcode: int) -> int:
+        return 0
+
+    def _op_rrc_r8(self, opcode: int) -> int:
+        return 0
 
     def _op_rl_r8(self, opcode: int) -> int:
         dest_reg: int = opcode & 0b111
@@ -960,11 +1135,11 @@ class CPU:
         elif dest_reg == 5:
             value = self.u8_regs[REG_L]
         else:
-            print(f"Invalid r8 register code: {dest_reg}")
+            print(f"(rl r8) Invalid r8 register code: {dest_reg}")
             exit()
 
         carry: int = (int(value) >> 7) & 1
-        value = (int(value) << 1) | ((self.f >> 4) & 1)
+        value = (int(value) << 1) | ((int(self.u8_regs[REG_F]) >> 4) & 1)
 
         if dest_reg == 6:
             addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
@@ -984,27 +1159,74 @@ class CPU:
         elif dest_reg == 5:
             self.u8_regs[REG_L] = value & 0xFF
         else:
-            print(f"Invalid destination r8 register code: {dest_reg}")
+            print(f"(rl r8) Invalid destination r8 register code: {dest_reg}")
             exit()
 
-        self.f = ((0 << 7) | (0 << 6) | (0 << 5) | (carry << 4)) & 0xF0
+        self.u8_regs[REG_F] = ((0 << 7) | (0 << 6) | (0 << 5) | (carry << 4)) & 0xF0
 
         return 8
 
-    # def _op_rr_r8(self, opcode: int) -> int:
-    #     return 0
+    def _op_rr_r8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_sla_r8(self, opcode: int) -> int:
-    #     return 0
+    def _op_sla_r8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_sra_r8(self, opcode: int) -> int:
-    #     return 0
+    def _op_sra_r8(self, opcode: int) -> int:
+        return 0
 
-    # def _op_swap_r8(self, opcode: int) -> int:
-    #     return 0
+    def _op_swap_r8(self, opcode: int) -> int:
+        dest_reg: int = opcode & 0b111
+        mmu_read_u8 = self.mmu.read_u8
+        mmu_write_u8 = self.mmu.write_u8
 
-    # def _op_srl_r8(self, opcode: int) -> int:
-    #     return 0
+        value: int = 0
+
+        if dest_reg == 6:
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+            value: int = mmu_read_u8(addr)
+            value = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4)
+            mmu_write_u8(addr, value & 0xFF)
+        elif dest_reg == 7:
+            value = self.u8_regs[REG_A]
+            value = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4)
+            self.u8_regs[REG_A] = value & 0xFF
+        elif dest_reg == 0:
+            value = self.u8_regs[REG_B]
+            value = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4)
+            self.u8_regs[REG_B] = value & 0xFF
+        elif dest_reg == 1:
+            value = self.u8_regs[REG_C]
+            value = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4)
+            self.u8_regs[REG_C] = value & 0xFF
+        elif dest_reg == 2:
+            value = self.u8_regs[REG_D]
+            value = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4)
+            self.u8_regs[REG_D] = value & 0xFF
+        elif dest_reg == 3:
+            value = self.u8_regs[REG_E]
+            value = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4)
+            self.u8_regs[REG_E] = value & 0xFF
+        elif dest_reg == 4:
+            value = self.u8_regs[REG_H]
+            value = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4)
+            self.u8_regs[REG_H] = value & 0xFF
+        elif dest_reg == 5:
+            value = self.u8_regs[REG_L]
+            value = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4)
+            self.u8_regs[REG_L] = value & 0xFF
+        else:
+            print(f"(swap r8) Invalid r8 register code: {dest_reg}")
+            exit()
+
+        self.u8_regs[REG_F] = (
+            (int(value == 0) << 7) | (0 << 6) | (0 << 5) | (0 << 4)
+        ) & 0xF0
+
+        return 8
+
+    def _op_srl_r8(self, opcode: int) -> int:
+        return 0
 
     def _op_bit_b_r8(self, opcode: int) -> int:
         bit: int = (opcode >> 3) & 0b111
@@ -1031,17 +1253,105 @@ class CPU:
         elif src_reg == 5:
             value = self.u8_regs[REG_L]
         else:
-            print(f"Invalid r8 register code: {src_reg}")
+            print(f"(bit b, r8) Invalid r8 register code: {src_reg}")
             exit()
 
-        self.f = (
+        self.u8_regs[REG_F] = (
             ((value & (1 << bit)) == 0) << 7 | (0 << 6) | (1 << 5) | (0 << 4)
         ) & 0xF0
 
         return 8
 
-    # def res_b3_r8(self, opcode: int) -> int:
-    #     return 0
+    def res_b3_r8(self, opcode: int) -> int:
+        bit: int = (opcode >> 3) & 0b111
+        dest_reg: int = opcode & 0b111
+        mmu_read_u8 = self.mmu.read_u8
+        mmu_write_u8 = self.mmu.write_u8
 
-    # def set_b3_r8(self, opcode: int) -> int:
-    #     return 0
+        value: int = 0
+
+        if dest_reg == 6:
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+            value = mmu_read_u8(addr)
+            value = value & ~(1 << bit)
+            mmu_write_u8(addr, value & 0xFF)
+        elif dest_reg == 7:
+            value = int(self.u8_regs[REG_A])
+            value = value & ~(1 << bit)
+            self.u8_regs[REG_A] = value & 0xFF
+        elif dest_reg == 0:
+            value = int(self.u8_regs[REG_B])
+            value = value & ~(1 << bit)
+            self.u8_regs[REG_B] = value & 0xFF
+        elif dest_reg == 1:
+            value = int(self.u8_regs[REG_C])
+            value = value & ~(1 << bit)
+            self.u8_regs[REG_C] = value & 0xFF
+        elif dest_reg == 2:
+            value = int(self.u8_regs[REG_D])
+            value = value & ~(1 << bit)
+            self.u8_regs[REG_D] = value & 0xFF
+        elif dest_reg == 3:
+            value = int(self.u8_regs[REG_E])
+            value = value & ~(1 << bit)
+            self.u8_regs[REG_E] = value & 0xFF
+        elif dest_reg == 4:
+            value = int(self.u8_regs[REG_H])
+            value = value & ~(1 << bit)
+            self.u8_regs[REG_H] = value & 0xFF
+        elif dest_reg == 5:
+            value = int(self.u8_regs[REG_L])
+            value = value & ~(1 << bit)
+            self.u8_regs[REG_L] = value & 0xFF
+        else:
+            print(f"(res b3, r8) Invalid r8 register code: {dest_reg}")
+            exit()
+
+        return 16 if dest_reg == 6 else 8
+
+    def set_b3_r8(self, opcode: int) -> int:
+        bit: int = (opcode >> 3) & 0b111
+        dest_reg: int = opcode & 0b111
+        mmu_read_u8 = self.mmu.read_u8
+        mmu_write_u8 = self.mmu.write_u8
+
+        value: int = 0
+
+        if dest_reg == 6:
+            addr: int = (int(self.u8_regs[REG_H]) << 8) | int(self.u8_regs[REG_L])
+            value = mmu_read_u8(addr)
+            value = value | (1 << bit)
+            mmu_write_u8(addr, value & 0xFF)
+        elif dest_reg == 7:
+            value = int(self.u8_regs[REG_A])
+            value = value | (1 << bit)
+            self.u8_regs[REG_A] = value & 0xFF
+        elif dest_reg == 0:
+            value = int(self.u8_regs[REG_B])
+            value = value | (1 << bit)
+            self.u8_regs[REG_B] = value & 0xFF
+        elif dest_reg == 1:
+            value = int(self.u8_regs[REG_C])
+            value = value | (1 << bit)
+            self.u8_regs[REG_C] = value & 0xFF
+        elif dest_reg == 2:
+            value = int(self.u8_regs[REG_D])
+            value = value | (1 << bit)
+            self.u8_regs[REG_D] = value & 0xFF
+        elif dest_reg == 3:
+            value = int(self.u8_regs[REG_E])
+            value = value | (1 << bit)
+            self.u8_regs[REG_E] = value & 0xFF
+        elif dest_reg == 4:
+            value = int(self.u8_regs[REG_H])
+            value = value | (1 << bit)
+            self.u8_regs[REG_H] = value & 0xFF
+        elif dest_reg == 5:
+            value = int(self.u8_regs[REG_L])
+            value = value | (1 << bit)
+            self.u8_regs[REG_L] = value & 0xFF
+        else:
+            print(f"(set b3, r8) Invalid r8 register code: {dest_reg}")
+            exit()
+
+        return 16 if dest_reg == 6 else 8

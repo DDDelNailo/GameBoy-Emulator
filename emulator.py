@@ -41,10 +41,6 @@ class Emulator:
         cycles: int = self.cpu.step()
         p.end("cpu", t)
 
-        if cycles == 0:
-            print("CPU step returned 0 cycles, which is invalid")
-            exit()
-
         t = p.begin("ppu")
         self.ppu.step(cycles)
         p.end("ppu", t)

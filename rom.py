@@ -311,7 +311,7 @@ NEW_LICENSEE_CODES: dict[str, str] = {
 class Rom:
     def __init__(self, path: str):
         self.data: bytes = Path(path).read_bytes()
-        self.header: Header = Header(self)
+        # self.header: Header = Header(self)
 
     def read_u8(self, addr: int) -> int:
         return self.data[addr]
